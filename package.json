@@ -26,3 +26,17 @@
     "typescript": "^5"
   }
 }
+
+
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "15.x",
+    "react": "18.x",
+    "react-dom": "18.x"
+  }
+}
