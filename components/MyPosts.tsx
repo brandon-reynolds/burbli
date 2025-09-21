@@ -1,6 +1,4 @@
-// components/MyPosts.tsx
 "use client";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
@@ -13,7 +11,8 @@ export default function MyPosts() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { window.location.href = "/signin"; return; }
       const { data, error } = await supabase
-        .from("jobs").select("*")
+        .from("jobs")
+        .select("*")
         .eq("owner_id", user.id)
         .order("created_at", { ascending: false });
       if (!error && data) setJobs(data as Job[]);
@@ -62,8 +61,16 @@ function Card({ job, onSave, onDelete }: { job: Job; onSave: (j: Job) => void; o
   }
 
   const fmt = (c?: number|null) =>
-    c == null ? "" :
-    new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(c/100);
+    c==null ? "" : new Intl.NumberFormat("en-AU",{style:"currency",currency:"AUD"}).format(c/100);
+
+  function copyLink() {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://burbli.vercel.app";
+    const url = `${origin}/post/${job.id}`;
+    navigator.clipboard?.writeText(url).then(
+      () => alert("Link copied to clipboard"),
+      () => window.prompt("Copy this link", url)
+    );
+  }
 
   return (
     <article className="rounded-2xl border bg-white p-4">
@@ -83,7 +90,9 @@ function Card({ job, onSave, onDelete }: { job: Job; onSave: (j: Job) => void; o
           <div className="flex gap-2 items-center">
             <input className="w-28 rounded-lg border px-2 py-1" value={draft.suburb} onChange={(e) => setDraft({ ...draft, suburb: e.target.value })} />
             <select className="rounded-lg border px-2 py-1" value={draft.state} onChange={(e) => setDraft({ ...draft, state: e.target.value as any })}>
-              {["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"].map((s) => <option key={s} value={s}>{s}</option>)}
+              {["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"].map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
             </select>
             <input className="w-20 rounded-lg border px-2 py-1" value={draft.postcode} onChange={(e) => setDraft({ ...draft, postcode: e.target.value })} />
           </div>
@@ -102,24 +111,17 @@ function Card({ job, onSave, onDelete }: { job: Job; onSave: (j: Job) => void; o
 
       <div className="mt-2 text-sm">
         {job.cost_type !== "hidden" ? (
-          <>
-            Cost: {job.cost_type === "exact" ? (
-              editing ? (
-                <input className="w-28 rounded-lg border px-2 py-1 ml-1" value={(draft.cost_amount ?? 0) / 100} onChange={(e) => setDraft({ ...draft, cost_amount: Math.round(parseFloat(e.target.value) * 100) })} />
-              ) : (
-                <span className="font-medium ml-1">{fmt(job.cost_amount)}</span>
-              )
-            ) : (
-              editing ? (
-                <>
-                  <input className="w-24 rounded-lg border px-2 py-1 ml-1" value={(draft.cost_min ?? 0) / 100} onChange={(e) => setDraft({ ...draft, cost_min: Math.round(parseFloat(e.target.value) * 100) })} />
-                  <span className="mx-1">to</span>
-                  <input className="w-24 rounded-lg border px-2 py-1" value={(draft.cost_max ?? 0) / 100} onChange={(e) => setDraft({ ...draft, cost_max: Math.round(parseFloat(e.target.value) * 100) })} />
-                </>
-              ) : (
-                <span className="font-medium ml-1">{fmt(job.cost_min)}–{fmt(job.cost_max)}</span>
-              )
-            )}
+          <>Cost: {job.cost_type === "exact"
+            ? (editing
+                ? <input className="w-28 rounded-lg border px-2 py-1 ml-1" value={(draft.cost_amount ?? 0)/100} onChange={(e)=>setDraft({ ...draft, cost_amount: Math.round(parseFloat(e.target.value)*100) })}/>
+                : <span className="font-medium ml-1">{fmt(job.cost_amount)}</span>)
+            : (editing
+                ? <>
+                    <input className="w-24 rounded-lg border px-2 py-1 ml-1" value={(draft.cost_min ?? 0)/100} onChange={(e)=>setDraft({ ...draft, cost_min: Math.round(parseFloat(e.target.value)*100) })}/>
+                    <span className="mx-1">to</span>
+                    <input className="w-24 rounded-lg border px-2 py-1" value={(draft.cost_max ?? 0)/100} onChange={(e)=>setDraft({ ...draft, cost_max: Math.round(parseFloat(e.target.value)*100) })}/>
+                  </>
+                : <span className="font-medium ml-1">{fmt(job.cost_min)}–{fmt(job.cost_max)}</span>)}
           </>
         ) : (
           <span className="text-gray-500">Cost hidden by user</span>
@@ -142,19 +144,13 @@ function Card({ job, onSave, onDelete }: { job: Job; onSave: (j: Job) => void; o
           </>
         ) : (
           <>
-            <Link href={`/post/${job.id}`} className="px-3 py-2 rounded-xl border text-sm">View</Link>
+            <a href={`/post/${job.id}`} className="px-3 py-2 rounded-xl border text-sm" target="_blank">Open</a>
+            <button onClick={copyLink} className="px-3 py-2 rounded-xl border text-sm">Copy link</button>
+            <button onClick={() => setEditing(true)} className="px-3 py-2 rounded-xl border text-sm">Edit</button>
             <button onClick={() => onDelete(job.id)} className="px-3 py-2 rounded-xl border text-sm text-red-600">Delete</button>
-            <button
-              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/post/${job.id}`)}
-              className="ml-1 px-3 py-2 rounded-xl border text-sm"
-            >
-              Copy link
-            </button>
           </>
         )}
-        <span className="ml-auto text-xs text-gray-500">
-          Posted {new Date(job.created_at).toLocaleDateString()}
-        </span>
+        <span className="ml-auto text-xs text-gray-500">Posted {new Date(job.created_at).toLocaleDateString()}</span>
       </div>
     </article>
   );
