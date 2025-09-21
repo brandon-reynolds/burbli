@@ -20,6 +20,7 @@ export default function SuburbPicker({
   const [err, setErr] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
+  // close on outside click
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (!boxRef.current) return;
@@ -29,13 +30,15 @@ export default function SuburbPicker({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  // reflect selected value in input
   useEffect(() => {
     if (value) setQ(`${value.suburb}, ${value.state} ${value.postcode}`);
     else setQ("");
   }, [value]);
 
+  // fetch suggestions (debounced)
   useEffect(() => {
-    if (!q || value) return;
+    if (!q || value) return; // don't search when a value is fixed
     const t = setTimeout(async () => {
       setLoading(true);
       setErr(null);
