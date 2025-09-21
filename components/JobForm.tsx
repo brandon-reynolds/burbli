@@ -1,4 +1,4 @@
-// components/JobForm.tsx
+// components/JobForm.tsx  (paste the whole file — note the import path)
 "use client";
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
