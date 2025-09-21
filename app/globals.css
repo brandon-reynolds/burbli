@@ -1,6 +1,6 @@
-/* Tailwind v4: import the framework */
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* (optional) your own styles */
+/* your custom styles can stay below */
 :root { color-scheme: light; }
-body { }
