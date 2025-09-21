@@ -1,6 +1,6 @@
 import "./globals.css";
 import Link from "next/link";
-import NavAuth from "../components/NavAuth";
+import NavAuth from "./components/NavAuth";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -31,9 +31,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="mx-auto max-w-6xl p-6 text-xs text-gray-500 flex flex-col md:flex-row gap-2 md:items-center md:justify-between">
             <div>© {new Date().getFullYear()} Burbli — Made in Melbourne</div>
             <div className="flex gap-4">
-              <a className="underline" href="#">Privacy</a>
-              <a className="underline" href="#">Terms</a>
-              <a className="underline" href="#">Contact</a>
+              <a className="underline" href="/privacy">Privacy</a>
+              <a className="underline" href="/terms">Terms</a>
+              <a className="underline" href="/contact">Contact</a>
             </div>
           </div>
         </footer>
