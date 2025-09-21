@@ -1,4 +1,3 @@
-// app/post/[id]/page.tsx
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -19,7 +18,6 @@ async function getJob(id: string): Promise<Job | null> {
     .eq("id", id)
     .eq("is_approved", true)
     .maybeSingle();
-
   if (error) return null;
   return (data as Job) ?? null;
 }
@@ -29,9 +27,7 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { id } = await params;
   const job = await getJob(id);
-  if (!job) {
-    return { title: "Post not found • Burbli" };
-  }
+  if (!job) return { title: "Post not found • Burbli" };
 
   const title = `${job.title} — ${job.suburb}, ${job.state} ${job.postcode}`;
   const description = [
@@ -51,13 +47,7 @@ export async function generateMetadata(
   return {
     title,
     description,
-    openGraph: {
-      title,
-      description,
-      url,
-      siteName: "Burbli",
-      type: "article",
-    },
+    openGraph: { title, description, url, siteName: "Burbli", type: "article" },
     twitter: { card: "summary_large_image", title, description },
   };
 }
@@ -106,7 +96,7 @@ export default async function PostPage(
         </time>
         <a
           className="underline"
-          href={`https://burbli.vercel.app/post/${job.id}`}
+          href={`/post/${job.id}`}
           target="_blank"
         >
           Open link
