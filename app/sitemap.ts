@@ -9,6 +9,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/submit",
     "/signin",
     "/myposts",
+    "/about",
     "/privacy",
     "/terms",
     "/contact",
