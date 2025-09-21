@@ -1,7 +1,4 @@
-/* Tailwind v3 style directives */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 /* your theme vars (keep these if you like) */
 :root {
