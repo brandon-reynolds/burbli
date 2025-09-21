@@ -2,11 +2,7 @@
   "name": "burbli",
   "private": true,
   "version": "0.1.0",
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
+  "scripts": { "dev": "next dev", "build": "next build", "start": "next start" },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "next": "15.5.3",
