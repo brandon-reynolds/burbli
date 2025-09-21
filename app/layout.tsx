@@ -14,13 +14,11 @@ export const metadata = {
       "Neighbourhood jobs & recommendations. Share what you paid and who did the work.",
     url: "https://burbli.vercel.app",
     siteName: "Burbli",
-    images: ["/og.png"], // optional: 1200×630 image in /public
+    images: ["/og.png"],
     locale: "en_AU",
     type: "website",
   },
-  twitter: {
-    card: "summary_large_image",
-  },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -42,22 +40,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
 
             <nav className="flex items-center gap-2">
-              <Link
-                href="/"
-                className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
-              >
+              <Link href="/" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
                 Home
               </Link>
-              <Link
-                href="/feed"
-                className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
-              >
+              <Link href="/feed" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
                 Browse jobs
               </Link>
-              <Link
-                href="/submit"
-                className="px-3 py-2 rounded-xl text-sm bg-gray-900 text-white"
-              >
+              <Link href="/submit" className="px-3 py-2 rounded-xl text-sm bg-gray-900 text-white">
                 Share your job
               </Link>
               <NavAuth />
@@ -71,15 +60,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="mx-auto max-w-6xl p-6 text-xs text-gray-500 flex flex-col md:flex-row gap-2 md:items-center md:justify-between">
             <div>© {new Date().getFullYear()} Burbli — Made in Melbourne</div>
             <div className="flex gap-4">
-              <a className="underline" href="/privacy">
-                Privacy
-              </a>
-              <a className="underline" href="/terms">
-                Terms
-              </a>
-              <a className="underline" href="/contact">
-                Contact
-              </a>
+              <a className="underline" href="/about">About</a>
+              <a className="underline" href="/privacy">Privacy</a>
+              <a className="underline" href="/terms">Terms</a>
+              <a className="underline" href="/contact">Contact</a>
             </div>
           </div>
         </footer>
