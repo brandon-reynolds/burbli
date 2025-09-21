@@ -1,6 +1,6 @@
 import "./globals.css";
 import Link from "next/link";
-import NavAuth from "@/components/NavAuth";
+import NavAuth from "../components/NavAuth";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
