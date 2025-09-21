@@ -1,6 +1,11 @@
 "use client";
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
@@ -17,13 +22,21 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md rounded-2xl border p-6">
+    <div className="mx-auto max-w-md rounded-3xl border bg-white p-6">
       <h1 className="text-xl font-semibold">Sign in</h1>
       <p className="text-sm text-gray-600 mt-1">We’ll email you a one-time sign-in link.</p>
-      <input className="w-full mt-4 border rounded-xl px-3 py-2" placeholder="you@example.com" value={email} onChange={(e)=>setEmail(e.target.value)} />
-      <button onClick={sendLink} className="mt-3 px-4 py-2 rounded-xl bg-gray-900 text-white">Send magic link</button>
+
+      <input
+        className="w-full mt-4 border rounded-xl px-3 py-2"
+        placeholder="you@example.com"
+        value={email}
+        onChange={(e)=>setEmail(e.target.value)}
+      />
+      <button onClick={sendLink} className="mt-3 px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-black">
+        Send magic link
+      </button>
+
       {sent && <p className="text-sm text-green-700 mt-3">Magic link sent to {sent}</p>}
     </div>
   );
 }
-
