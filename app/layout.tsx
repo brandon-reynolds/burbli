@@ -38,6 +38,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a className="underline" href="/contact">Contact</a>
             </div>
           </div>
+
+          <div className="flex gap-4">
+  <a className="underline" href="/privacy">Privacy</a>
+  <a className="underline" href="/terms">Terms</a>
+  <a className="underline" href="/contact">Contact</a>
+  <span className="text-gray-400">
+    Build {process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0,7) ?? "dev"}
+  </span>
+</div>
+
+        
         </footer>
       </body>
     </html>
