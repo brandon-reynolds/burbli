@@ -15,13 +15,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <p className="text-sm text-gray-500 -mt-1">Neighbourhood jobs & recommendations</p>
               </div>
             </div>
-
             <nav className="flex items-center gap-2">
               <Link href="/" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">Home</Link>
               <Link href="/feed" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">Browse jobs</Link>
               <Link href="/submit" className="px-3 py-2 rounded-xl text-sm bg-gray-900 text-white">Share your job</Link>
-
-              {/* Auth-aware items */}
               <NavAuth />
             </nav>
           </div>
