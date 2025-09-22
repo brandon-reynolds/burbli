@@ -46,8 +46,9 @@ export default function JobForm({ onCreated }: { onCreated: (j: Job) => void }) 
     if (error) return alert(error.message);
     onCreated(data as Job);
 
-    setTitle(""); setPicked(null);
-    setBiz(""); setRec("yes"); setCostType("hidden");
+    // reset
+    setTitle(""); setPicked(null); setBiz("");
+    setRec("yes"); setCostType("hidden");
     setCostExact(""); setCostMin(""); setCostMax(""); setNotes("");
     alert("Thanks for sharing! Your job has been posted.");
   }
@@ -65,7 +66,6 @@ export default function JobForm({ onCreated }: { onCreated: (j: Job) => void }) 
 
         <div>
           <label className="block text-sm font-medium mb-1">Suburb</label>
-          {/* Single field with autocomplete; the component shows a tiny “Selected …” line beneath when chosen */}
           <SuburbAutocomplete value={picked} onPicked={setPicked} />
         </div>
 
@@ -87,46 +87,23 @@ export default function JobForm({ onCreated }: { onCreated: (j: Job) => void }) 
 
         <div>
           <div className="flex flex-wrap gap-4 text-sm">
-            <label className="inline-flex items-center gap-2">
-              <input type="radio" checked={costType === "hidden"} onChange={() => setCostType("hidden")} /> Prefer not to say
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <input type="radio" checked={costType === "exact"} onChange={() => setCostType("exact")} /> Exact
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <input type="radio" checked={costType === "range"} onChange={() => setCostType("range")} /> Range
-            </label>
+            <label className="inline-flex items-center gap-2"><input type="radio" checked={costType === "hidden"} onChange={() => setCostType("hidden")} /> Prefer not to say</label>
+            <label className="inline-flex items-center gap-2"><input type="radio" checked={costType === "exact"} onChange={() => setCostType("exact")} /> Exact</label>
+            <label className="inline-flex items-center gap-2"><input type="radio" checked={costType === "range"} onChange={() => setCostType("range")} /> Range</label>
           </div>
-
           {costType === "exact" && (
             <div className="mt-2 flex items-center gap-2">
               <span>$</span>
-              <input
-                className="border rounded-xl px-3 py-2 w-40"
-                value={costExact}
-                onChange={(e) => setCostExact(e.target.value)}
-                placeholder="3899.99"
-              />
+              <input className="border rounded-xl px-3 py-2 w-40" value={costExact} onChange={(e) => setCostExact(e.target.value)} placeholder="3899.99" />
             </div>
           )}
-
           {costType === "range" && (
             <div className="mt-2 flex items-center gap-2">
               <span>$</span>
-              <input
-                className="border rounded-xl px-3 py-2 w-36"
-                value={costMin}
-                onChange={(e) => setCostMin(e.target.value)}
-                placeholder="180"
-              />
+              <input className="border rounded-xl px-3 py-2 w-36" value={costMin} onChange={(e) => setCostMin(e.target.value)} placeholder="180" />
               <span>to</span>
               <span>$</span>
-              <input
-                className="border rounded-xl px-3 py-2 w-36"
-                value={costMax}
-                onChange={(e) => setCostMax(e.target.value)}
-                placeholder="320"
-              />
+              <input className="border rounded-xl px-3 py-2 w-36" value={costMax} onChange={(e) => setCostMax(e.target.value)} placeholder="320" />
             </div>
           )}
         </div>
