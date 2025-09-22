@@ -1,9 +1,14 @@
+// components/NavAuth.tsx
 "use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
+/**
+ * variant="inline" -> desktop header row
+ * variant="menu"   -> stacked items in the mobile dropdown
+ */
 export default function NavAuth({ variant = "inline" }: { variant?: "inline" | "menu" }) {
   const [email, setEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,8 +31,8 @@ export default function NavAuth({ variant = "inline" }: { variant?: "inline" | "
     window.location.href = "/";
   }
 
-  // while loading, show a deterministic item to avoid layout jump
-  if (loading) {
+  // While loading, show Sign in to avoid layout jump
+  if (loading || !email) {
     return variant === "menu" ? (
       <Link href="/signin" className="px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Sign in</Link>
     ) : (
@@ -35,15 +40,7 @@ export default function NavAuth({ variant = "inline" }: { variant?: "inline" | "
     );
   }
 
-  if (!email) {
-    return variant === "menu" ? (
-      <Link href="/signin" className="px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Sign in</Link>
-    ) : (
-      <Link href="/signin" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">Sign in</Link>
-    );
-  }
-
-  // signed in
+  // Signed in
   return variant === "menu" ? (
     <>
       <Link href="/myposts" className="px-3 py-2 rounded-lg text-sm hover:bg-gray-50">My posts</Link>
