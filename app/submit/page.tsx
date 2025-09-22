@@ -11,8 +11,11 @@ export default function SubmitPage() {
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) window.location.href = "/signin";
-      else setUserId(user.id);
+      if (!user) {
+        window.location.replace("/signin");
+        return;
+      }
+      setUserId(user.id);
     })();
   }, []);
 
@@ -29,4 +32,3 @@ export default function SubmitPage() {
     </section>
   );
 }
-
