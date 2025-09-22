@@ -46,7 +46,6 @@ export default function JobForm({ onCreated }: { onCreated: (j: Job) => void }) 
     if (error) return alert(error.message);
     onCreated(data as Job);
 
-    // reset form
     setTitle(""); setPicked(null);
     setBiz(""); setRec("yes"); setCostType("hidden");
     setCostExact(""); setCostMin(""); setCostMax(""); setNotes("");
@@ -75,8 +74,12 @@ export default function JobForm({ onCreated }: { onCreated: (j: Job) => void }) 
         <input className="border rounded-xl px-3 py-2" placeholder="Who did it (business or tradie name)" value={biz} onChange={(e) => setBiz(e.target.value)} />
 
         <div className="flex gap-4 text-sm">
-          <label className="inline-flex items-center gap-2"><input type="radio" checked={rec === "yes"} onChange={() => setRec("yes")} /> Recommend</label>
-          <label className="inline-flex items-center gap-2"><input type="radio" checked={rec === "no"} onChange={() => setRec("no")} /> Not recommend</label>
+          <label className="inline-flex items-center gap-2">
+            <input type="radio" checked={rec === "yes"} onChange={() => setRec("yes")} /> Recommend
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="radio" checked={rec === "no"} onChange={() => setRec("no")} /> Not recommend
+          </label>
         </div>
 
         <div>
