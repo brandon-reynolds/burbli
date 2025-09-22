@@ -9,43 +9,43 @@ export default function NavAuth() {
 
   useEffect(() => {
     let mounted = true;
-
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (mounted) setEmail(data.user?.email ?? null);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (mounted) setEmail(user?.email ?? null);
     })();
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
-      setEmail(sess?.user?.email ?? null);
-    });
-
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
+    return () => { mounted = false; };
   }, []);
 
   async function signOut() {
     await supabase.auth.signOut();
-    window.location.href = "/"; // back to home after sign out
+    // Refresh UI so the header re-renders immediately
+    window.location.href = "/";
   }
 
-  // Not signed in → show “Sign in”
-  if (!email) {
+  // While checking session, render nothing (avoids flicker)
+  if (email === null) {
     return (
-      <Link href="/signin" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
+      <Link
+        href="/signin"
+        className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
+      >
         Sign in
       </Link>
     );
   }
 
-  // Signed in → show “My posts” + “Sign out”
   return (
     <div className="flex items-center gap-2">
-      <Link href="/myposts" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
+      <Link
+        href="/myposts"
+        className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
+      >
         My posts
       </Link>
-      <button onClick={signOut} className="px-3 py-2 rounded-xl text-sm border hover:bg-gray-50">
+      <button
+        onClick={signOut}
+        className="px-3 py-2 rounded-xl text-sm border hover:bg-gray-50"
+      >
         Sign out
       </button>
     </div>
