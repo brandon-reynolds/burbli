@@ -1,5 +1,6 @@
 import "./globals.css";
 import Link from "next/link";
+import NavAuth from "@/components/NavAuth";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -11,13 +12,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <div className="h-9 w-9 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">BR</div>
               <div>
                 <h1 className="font-semibold text-lg">Burbli</h1>
+                <p className="text-sm text-gray-500 -mt-1">Neighbourhood jobs & recommendations</p>
               </div>
             </div>
             <nav className="flex items-center gap-2">
               <Link href="/" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">Home</Link>
               <Link href="/feed" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">Browse jobs</Link>
               <Link href="/submit" className="px-3 py-2 rounded-xl text-sm bg-gray-900 text-white">Share your job</Link>
-              <Link href="/signin" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">Sign in</Link>
+              <NavAuth />
             </nav>
           </div>
         </header>
