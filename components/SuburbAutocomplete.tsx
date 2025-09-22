@@ -1,9 +1,13 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-export type PickedSuburb = { suburb: string; state: "VIC"|"NSW"|"QLD"|"SA"|"WA"|"TAS"|"ACT"|"NT"; postcode: string };
+export type PickedSuburb = {
+  suburb: string;
+  state: "VIC"|"NSW"|"QLD"|"SA"|"WA"|"TAS"|"ACT"|"NT";
+  postcode: string;
+};
 
-type Locality = { suburb: string; state: PickedSuburb["state"]; postcode: string };
+type Locality = PickedSuburb;
 
 function norm(s: string) {
   return s.normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -26,7 +30,6 @@ export default function SuburbAutocomplete({
   const [err, setErr] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  // Close when clicking outside
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (!boxRef.current) return;
@@ -36,7 +39,6 @@ export default function SuburbAutocomplete({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  // Load static dataset from /public
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -52,7 +54,6 @@ export default function SuburbAutocomplete({
     return () => { alive = false; };
   }, []);
 
-  // reflect selected value in input
   useEffect(() => {
     if (value) setQ(`${value.suburb}, ${value.state} ${value.postcode}`);
     else setQ("");
@@ -64,7 +65,6 @@ export default function SuburbAutocomplete({
     const hits = data.filter((d) => {
       const key = `${d.suburb}, ${d.state} ${d.postcode}`;
       const nk = norm(key);
-      // startsWith suburb OR includes anywhere in the "suburb, STATE POSTCODE" string
       return norm(d.suburb).startsWith(nq) || nk.includes(nq);
     });
     return hits.slice(0, max);
