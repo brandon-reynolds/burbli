@@ -11,7 +11,7 @@ export default function SiteNav() {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close menu on outside click
+  // Close on outside click
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!menuRef.current) return;
@@ -21,7 +21,7 @@ export default function SiteNav() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  // Close menu when route changes
+  // Close on route change
   useEffect(() => { setOpen(false); }, [pathname]);
 
   const isActive = (path: string) => pathname === path;
@@ -62,10 +62,11 @@ export default function SiteNav() {
         {desktopLink("/", "Home")}
         {desktopLink("/feed", "Browse jobs")}
         {desktopLink("/submit", "Share your job")}
-        <NavAuth variant="inline" />
+        {/* Auth-aware items (inline). We pass pathname so "My posts" can highlight */}
+        <NavAuth variant="inline" currentPath={pathname} />
       </nav>
 
-      {/* Mobile menu */}
+      {/* Mobile nav */}
       <div className="relative md:hidden" ref={menuRef}>
         <button
           type="button"
@@ -89,8 +90,8 @@ export default function SiteNav() {
               {mobileLink("/", "Home")}
               {mobileLink("/feed", "Browse jobs")}
               {mobileLink("/submit", "Share your job")}
-              {/* Auth-aware items (stacked) */}
-              <NavAuth variant="menu" />
+              {/* Auth-aware items for mobile. onAction closes the menu instantly */}
+              <NavAuth variant="menu" currentPath={pathname} onAction={() => setOpen(false)} />
             </div>
           </div>
         )}
