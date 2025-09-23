@@ -46,9 +46,7 @@ export default function PublicPostPage() {
       }
     }
     if (id) load();
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, [id]);
 
   function goBack() {
@@ -81,26 +79,30 @@ export default function PublicPostPage() {
 
   return (
     <div className="space-y-3">
-      {/* Mobile back bar */}
-      <div className="md:hidden">
+      {/* Mobile top bar with Back */}
+      <div className="md:hidden flex items-center gap-2">
         <button
           onClick={goBack}
           className="inline-flex items-center gap-2 rounded-lg px-3 py-2 border hover:bg-gray-50"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5 text-gray-700" aria-hidden>
-            <path
-              d="M15 6l-6 6 6 6"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              fill="none"
-            />
+            <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
           </svg>
           <span className="text-sm">Back</span>
         </button>
       </div>
 
-      {/* Detail card (public variant = smaller CTAs under a divider) */}
+      {/* Mobile heading (title + tiny location) */}
+      <div className="md:hidden">
+        <h1 className="mt-1 text-xl font-semibold leading-snug">
+          {job.title || "Project details"}
+        </h1>
+        <p className="mt-0.5 text-sm text-gray-600">
+          {job.suburb}, {job.state} {job.postcode}
+        </p>
+      </div>
+
+      {/* Detail card (public variant = compact CTAs under divider) */}
       <JobDetailCard job={job} variant="public" />
     </div>
   );
