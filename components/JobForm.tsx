@@ -5,10 +5,7 @@ import { useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
-type Props = {
-  onCreated?: (job: Job) => void;
-};
-
+type Props = { onCreated?: (job: Job) => void };
 type CostType = "exact" | "range" | "na";
 
 export default function JobForm({ onCreated }: Props) {
@@ -47,8 +44,8 @@ export default function JobForm({ onCreated }: Props) {
       return;
     }
 
-    // Validate cost fields based on type
-    let payload: Partial<Job> = {
+    // Build payload
+    const payload: Partial<Job> = {
       title: title.trim(),
       business_name: business.trim(),
       recommend: recommend === "yes",
@@ -59,6 +56,7 @@ export default function JobForm({ onCreated }: Props) {
       notes: notes.trim() ? notes.trim() : null,
     };
 
+    // Cost validation + assignment
     if (costType === "exact") {
       const v = numOrNull(costExact);
       if (v == null) {
@@ -86,12 +84,16 @@ export default function JobForm({ onCreated }: Props) {
 
     setSaving(true);
 
-    // Attach owner_id from current session
-    const { data: session } = await supabase.auth.getUser();
-    const owner = session?.data?.user?.id ?? null;
-    payload.owner_id = owner;
+    // Attach owner_id from current session (correct supabase v2 usage)
+    const { data: { user } } = await supabase.auth.getUser();
+    payload.owner_id = user?.id ?? null;
 
-    const { data, error } = await supabase.from("jobs").insert(payload).select("*").single();
+    const { data, error } = await supabase
+      .from("jobs")
+      .insert(payload)
+      .select("*")
+      .single();
+
     setSaving(false);
 
     if (error) {
@@ -187,13 +189,11 @@ export default function JobForm({ onCreated }: Props) {
             inputMode="numeric"
             pattern="\d{4}"
             value={postcode}
-            onChange={(e) =>
-              setPostcode(e.target.value.replace(/[^\d]/g, "").slice(0, 4))
-            }
+            onChange={(e) => setPostcode(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
           />
         </div>
 
-        {/* Cost group */}
+        {/* Cost */}
         <div className="md:col-span-2">
           <label className="text-sm font-medium text-gray-700">Cost</label>
           <div className="mt-1 grid grid-cols-1 gap-3 md:grid-cols-4">
