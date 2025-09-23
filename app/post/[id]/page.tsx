@@ -4,19 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import JobDetailCard from "@/components/JobDetailCard";
-
-type Job = {
-  id: string;
-  created_at: string;
-  title: string | null;
-  who: string | null;
-  suburb: string | null;
-  state: string | null;
-  postcode: string | null;
-  recommended: boolean | null;
-  cost_text: string | null;
-  notes: string | null;
-};
+import type { Job } from "@/types"; // <-- use your project’s canonical Job type
 
 export default function PublicJobPage() {
   const params = useParams<{ id: string }>();
@@ -27,17 +15,24 @@ export default function PublicJobPage() {
   useEffect(() => {
     let ignore = false;
     (async () => {
-      if (!params?.id) return;
+      const id = params?.id;
+      if (!id) return;
+
+      // Fetch all columns so it matches the Job type JobDetailCard expects
       const { data, error } = await supabase
         .from("jobs")
         .select("*")
-        .eq("id", params.id)
+        .eq("id", id)
         .single();
+
       if (!ignore) {
-        if (!error) setJob(data as Job);
+        if (!error && data) {
+          setJob(data as Job);
+        }
         setLoading(false);
       }
     })();
+
     return () => {
       ignore = true;
     };
