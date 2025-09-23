@@ -120,16 +120,15 @@ export default function FeedPage() {
 
   const selected = items.find(i => i.id === selectedId) || null;
 
-  // simple helper to decide mobile vs desktop at click time
+  // helper to decide mobile vs desktop at click time
   const isDesktop = () =>
     typeof window !== "undefined" &&
     window.matchMedia("(min-width: 1024px)").matches; // Tailwind lg breakpoint
 
   return (
     <section className="grid gap-4 lg:grid-cols-12">
-      {/* LEFT: filters + list (full width on mobile) */}
+      {/* LEFT: filters + list */}
       <div className="lg:col-span-5 lg:pr-2">
-        {/* Filters (NO sticky) */}
         <div className="rounded-2xl border bg-white p-3 md:p-4">
           {/* Search */}
           <div className="relative">
@@ -171,7 +170,7 @@ export default function FeedPage() {
           </label>
         </div>
 
-        {/* Condensed list */}
+        {/* List */}
         <div className="mt-3 rounded-2xl border bg-white overflow-hidden">
           <ul className="divide-y">
             {items.length === 0 && !loading && (
@@ -195,7 +194,6 @@ export default function FeedPage() {
                         : "hover:bg-gray-50",
                     ].join(" ")}
                   >
-                    {/* Row 1: dot + title + age + rec badge */}
                     <div className="flex items-start gap-2">
                       <span
                         className={[
@@ -214,7 +212,6 @@ export default function FeedPage() {
                           </span>
                         </div>
 
-                        {/* Row 2: compact meta */}
                         <div className="mt-1 text-[13px] text-gray-600 flex flex-wrap items-center gap-x-3 gap-y-1">
                           {j.business_name && <span className="truncate">{j.business_name}</span>}
                           <span className="truncate">{j.suburb}, {j.state} {j.postcode}</span>
@@ -237,7 +234,6 @@ export default function FeedPage() {
               );
             })}
 
-            {/* Loading skeletons */}
             {loading && (
               <>
                 {Array.from({ length: 3 }).map((_, i) => (
@@ -251,7 +247,6 @@ export default function FeedPage() {
           </ul>
         </div>
 
-        {/* Load more */}
         {!loading && canLoadMore && (
           <div className="flex justify-center pt-2">
             <button
@@ -274,6 +269,8 @@ export default function FeedPage() {
 
 function DetailPane({ job }: { job: Job | null }) {
   const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
+
   if (!job) {
     return (
       <div className="rounded-2xl border bg-white p-6 text-sm text-gray-600">
@@ -282,90 +279,112 @@ function DetailPane({ job }: { job: Job | null }) {
     );
   }
 
-  const isNegative = job.recommend === false;
   const shareUrl =
     typeof window !== "undefined" ? `${window.location.origin}/post/${job.id}` : `/post/${job.id}`;
 
-  // accent styles so the detail pane feels distinct
-  const accent = isNegative
-    ? {
-        headerBg: "bg-red-50",
-        headerText: "text-red-800",
-        headerBorder: "border-red-200",
-        frame: "border-red-300",
-        chip: "bg-red-50 text-red-800 border-red-200",
+  async function shareNative() {
+    try {
+      if (typeof navigator !== "undefined" && (navigator as any).share) {
+        await (navigator as any).share({
+          title: job.title || "Burbli job",
+          text: "Found this job on Burbli — could be useful.",
+          url: shareUrl,
+        });
+        setShared(true);
+        setTimeout(() => setShared(false), 1200);
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
       }
-    : {
-        headerBg: "bg-green-50",
-        headerText: "text-green-800",
-        headerBorder: "border-green-200",
-        frame: "border-green-300",
-        chip: "bg-green-50 text-green-800 border-green-200",
-      };
+    } catch {
+      // ignored
+    }
+  }
 
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
+  const chip = job.recommend
+    ? "bg-green-50 text-green-800 border-green-200"
+    : "bg-red-50 text-red-800 border-red-200";
+
   return (
-    <article className={`rounded-3xl border-2 ${accent.frame} overflow-hidden`}>
-      {/* Colored header band */}
-      <div className={`px-5 py-4 border-b ${accent.headerBg} ${accent.headerBorder} ${accent.headerText}`}>
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="text-2xl font-semibold leading-tight">{job.title || "Untitled job"}</h2>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs border ${accent.chip.split(" ").slice(2).join(" ")}`}>
-            {isNegative ? "Not recommended" : "Recommended"}
-          </span>
-        </div>
+    <article className="rounded-2xl border bg-white p-5 md:p-6">
+      {/* summary row */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-xs text-gray-500">{since(job.created_at)}</div>
+        <span className={`rounded-full px-2 py-0.5 text-xs border ${chip}`}>
+          {job.recommend ? "Recommended" : "Not recommended"}
+        </span>
       </div>
 
-      {/* Body */}
-      <div className="p-5 md:p-6">
-        {/* Primary facts row */}
-        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
-          {job.business_name && (
-            <span className="rounded-lg border px-2 py-1 bg-gray-50">{job.business_name}</span>
-          )}
-          <span className="rounded-lg border px-2 py-1 bg-gray-50">
-            {job.suburb}, {job.state} {job.postcode}
-          </span>
-          <span className="rounded-lg border px-2 py-1 bg-gray-50">{since(job.created_at)}</span>
-        </div>
+      {/* FIELD: Title */}
+      <section className="mt-2">
+        <div className="text-[11px] uppercase tracking-wide text-gray-500">Title</div>
+        <h2 className="mt-1 text-2xl font-semibold leading-snug">
+          {job.title || "Untitled job"}
+        </h2>
+      </section>
 
-        {/* Cost block */}
-        <div className="mt-4 rounded-2xl border bg-gray-50 p-4">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Cost</div>
-          <div className="mt-1 text-xl font-semibold">
-            {costLabel(job)}
-          </div>
-        </div>
-
-        {/* Notes */}
-        {job.notes?.trim() && (
-          <div className="mt-5">
-            <div className="text-sm text-gray-500">Notes</div>
-            <div className="mt-2 text-[15px] leading-6 text-gray-900 whitespace-pre-wrap">
-              {job.notes.trim()}
-            </div>
-          </div>
+      {/* quick tags (location) */}
+      <div className="mt-3 flex flex-wrap gap-2 text-sm">
+        {job.business_name && (
+          <span className="rounded-lg border bg-gray-50 px-2 py-1">{job.business_name}</span>
         )}
-
-        {/* Actions */}
-        <div className="mt-6 flex flex-wrap gap-2">
-          <button
-            onClick={copyLink}
-            className="px-3 py-1.5 rounded-xl bg-gray-900 text-white hover:bg-gray-800"
-          >
-            {copied ? "Copied!" : "Copy link"}
-          </button>
-        </div>
+        <span className="rounded-lg border bg-gray-50 px-2 py-1">
+          {job.suburb}, {job.state} {job.postcode}
+        </span>
       </div>
+
+      {/* FIELD: Who did it */}
+      <section className="mt-6">
+        <div className="text-[11px] uppercase tracking-wide text-gray-500">Who did it</div>
+        <div className="mt-1 text-[15px] text-gray-900">
+          {job.business_name || "Not specified"}
+        </div>
+      </section>
+
+      {/* FIELD: Cost */}
+      <section className="mt-6">
+        <div className="text-[11px] uppercase tracking-wide text-gray-500">Cost</div>
+        <div className="mt-1 text-xl font-semibold">{costLabel(job)}</div>
+      </section>
+
+      {/* FIELD: Details */}
+      <section className="mt-6">
+        <div className="text-[11px] uppercase tracking-wide text-gray-500">Details</div>
+        <div className="mt-2 text-[15px] leading-6 text-gray-900 whitespace-pre-wrap">
+          {job.notes?.trim() || "—"}
+        </div>
+      </section>
+
+      {/* CTAs */}
+      <section className="mt-8 flex flex-wrap gap-2">
+        <a
+          href="/submit"
+          className="px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-gray-800"
+        >
+          Share your job
+        </a>
+        <button
+          onClick={shareNative}
+          className="px-4 py-2 rounded-xl border hover:bg-gray-50"
+        >
+          {shared ? "Shared!" : "Share with a friend"}
+        </button>
+        <button
+          onClick={copyLink}
+          className="px-4 py-2 rounded-xl border hover:bg-gray-50"
+        >
+          {copied ? "Copied!" : "Copy link"}
+        </button>
+      </section>
     </article>
   );
 }
