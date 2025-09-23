@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import JobDetailCard from "@/components/JobDetailCard";
 
@@ -49,8 +50,11 @@ function since(iso: string) {
 }
 
 export default function FeedPage() {
+  const searchParams = useSearchParams();
+  const initialQ = (searchParams.get("q") ?? "").trim();
+
   // filters
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQ);
   const [stateFilter, setStateFilter] = useState<(typeof STATES)[number]>("ALL");
   const [onlyRecommended, setOnlyRecommended] = useState(false);
 
@@ -171,8 +175,8 @@ export default function FeedPage() {
           </label>
         </div>
 
-        {/* List */}
-        <div className="mt-3 rounded-2xl border bg-white overflow-hidden">
+        {/* List (no overflow-hidden to avoid clipped corners) */}
+        <div className="mt-3 rounded-2xl border bg-white">
           <ul className="divide-y">
             {items.length === 0 && !loading && (
               <li className="px-4 py-6 text-sm text-gray-600">No results</li>
@@ -180,8 +184,13 @@ export default function FeedPage() {
 
             {items.map((j) => {
               const link = `/post/${j.id}`;
+              const selectedStyle =
+                selectedId === j.id && isDesktop()
+                  ? "bg-gray-50 border-2 border-gray-900"
+                  : "hover:bg-gray-50 border-transparent";
+
               return (
-                <li key={j.id}>
+                <li key={j.id} className="px-1"> {/* tiny padding prevents visual clipping */}
                   <button
                     onClick={() => {
                       if (isDesktop()) setSelectedId(j.id);
@@ -189,10 +198,8 @@ export default function FeedPage() {
                     }}
                     aria-current={selectedId === j.id ? "true" : undefined}
                     className={[
-                      "w-full text-left px-4 py-3 transition",
-                      selectedId === j.id && isDesktop()
-                        ? "bg-gray-50 ring-inset ring-2 ring-gray-900"
-                        : "hover:bg-gray-50",
+                      "w-full text-left px-4 py-3 transition rounded-xl border",
+                      selectedStyle,
                     ].join(" ")}
                   >
                     <div className="flex items-start gap-2">
