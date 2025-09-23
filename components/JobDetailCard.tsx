@@ -47,7 +47,6 @@ function since(iso: string) {
 
 export default function JobDetailCard({ job }: { job: Job | null }) {
   const [copied, setCopied] = useState(false);
-  const [shared, setShared] = useState(false);
 
   if (!job) {
     return (
@@ -59,24 +58,6 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
 
   const shareUrl =
     typeof window !== "undefined" ? `${window.location.origin}/post/${job.id}` : `/post/${job.id}`;
-
-  async function shareNative() {
-    try {
-      if (typeof navigator !== "undefined" && (navigator as any).share) {
-        await (navigator as any).share({
-          title: job?.title ?? "Burbli job",
-          text: "Found this job on Burbli — could be useful.",
-          url: shareUrl,
-        });
-        setShared(true);
-        setTimeout(() => setShared(false), 1200);
-      } else {
-        await navigator.clipboard.writeText(shareUrl);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1200);
-      }
-    } catch { /* ignore */ }
-  }
 
   async function copyLink() {
     try {
@@ -158,9 +139,6 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
         <a href="/submit" className="px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-gray-800">
           Post a job
         </a>
-        <button onClick={shareNative} className="px-4 py-2 rounded-xl border hover:bg-gray-50">
-          {shared ? "Shared!" : "Share with a friend"}
-        </button>
         <button onClick={copyLink} className="px-4 py-2 rounded-xl border hover:bg-gray-50">
           {copied ? "Copied!" : "Copy link"}
         </button>
