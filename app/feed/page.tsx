@@ -24,6 +24,7 @@ function FeedInner() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selected, setSelected] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const params = useSearchParams();
   const router = useRouter();
@@ -33,12 +34,22 @@ function FeedInner() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("ALL");
   const [recOnly, setRecOnly] = useState(false);
 
-  // track media query for desktop
+  // desktop hint (avoid auto-select on mobile)
   const isDesktopRef = useRef<boolean>(false);
   useEffect(() => {
     if (typeof window !== "undefined") {
       isDesktopRef.current = window.matchMedia("(min-width: 1024px)").matches;
     }
+  }, []);
+
+  // Get signed-in user id (for showing edit shortcuts)
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!ignore) setCurrentUserId(user?.id ?? null);
+    })();
+    return () => { ignore = true; };
   }, []);
 
   // Load jobs
@@ -61,7 +72,18 @@ function FeedInner() {
     };
   }, []);
 
-  // Base filtered by search + recommended (for counts)
+  // Sync q and id from URL so links like /feed?q=Epping work
+  useEffect(() => {
+    const urlQ = params.get("q") ?? "";
+    setQ(urlQ);
+
+    const id = params.get("id");
+    if (id && jobs.length > 0) {
+      setSelected(jobs.find((j) => j.id === id) ?? null);
+    }
+  }, [params, jobs]);
+
+  // Filtered sets
   const baseFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return jobs.filter((j) => {
@@ -72,25 +94,14 @@ function FeedInner() {
         j.business_name ?? "",
         j.suburb ?? "",
         j.postcode ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
+      ].join(" ").toLowerCase();
       return hay.includes(needle);
     });
   }, [jobs, q, recOnly]);
 
-  // State counts
   const counts = useMemo(() => {
     const map: Record<StateFilter, number> = {
-      ALL: baseFiltered.length,
-      VIC: 0,
-      NSW: 0,
-      QLD: 0,
-      SA: 0,
-      WA: 0,
-      TAS: 0,
-      ACT: 0,
-      NT: 0,
+      ALL: baseFiltered.length, VIC: 0, NSW: 0, QLD: 0, SA: 0, WA: 0, TAS: 0, ACT: 0, NT: 0,
     };
     for (const j of baseFiltered) {
       const st = (j.state as AusState) || null;
@@ -99,29 +110,21 @@ function FeedInner() {
     return map;
   }, [baseFiltered]);
 
-  // Apply state filter
-  const filtered = useMemo(() => {
-    return baseFiltered.filter((j) => stateFilter === "ALL" || j.state === stateFilter);
-  }, [baseFiltered, stateFilter]);
+  const filtered = useMemo(
+    () => baseFiltered.filter((j) => stateFilter === "ALL" || j.state === stateFilter),
+    [baseFiltered, stateFilter]
+  );
 
-  // Restore selection from ?id=
-  useEffect(() => {
-    const id = params.get("id");
-    if (!id || jobs.length === 0) return;
-    setSelected(jobs.find((j) => j.id === id) ?? null);
-  }, [params, jobs]);
-
-  // Auto-select first on desktop
+  // Auto-select first on desktop when none selected
   useEffect(() => {
     if (!isDesktopRef.current) return;
     if (selected) return;
     if (!loading && filtered.length > 0) {
       setSelected(filtered[0]);
-      router.push(`/feed?id=${filtered[0].id}`, { scroll: false });
+      router.push(`/feed?id=${filtered[0].id}${q ? `&q=${encodeURIComponent(q)}` : ""}`, { scroll: false });
     }
-  }, [filtered, loading, selected, router]);
+  }, [filtered, loading, selected, router, q]);
 
-  // Clear filters
   function clearFilters() {
     setQ("");
     setStateFilter("ALL");
@@ -135,6 +138,19 @@ function FeedInner() {
       active ? "bg-gray-900 text-white border-gray-900" : "bg-white hover:bg-gray-50"
     }`;
 
+  // Small helper to compute cost for left cards
+  function costDisplay(j: Job) {
+    if (j.cost_type === "exact" && j.cost_exact != null)
+      return `$${Math.round(j.cost_exact).toLocaleString()}`;
+    if (j.cost_type === "range" && j.cost_min != null && j.cost_max != null)
+      return `$${Math.round(j.cost_min).toLocaleString()}–$${Math.round(j.cost_max).toLocaleString()}`;
+    // legacy fallbacks just in case
+    const anyJob = j as Record<string, any>;
+    if (typeof anyJob.cost === "number") return `$${Math.round(anyJob.cost).toLocaleString()}`;
+    if (typeof anyJob.cost_text === "string" && anyJob.cost_text.trim()) return anyJob.cost_text.trim();
+    return null;
+  }
+
   return (
     <section className="space-y-4">
       {/* Filters */}
@@ -144,23 +160,24 @@ function FeedInner() {
             <div className="relative flex-1">
               <input
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  // keep URL in sync with typing
+                  const base = "/feed";
+                  const qs = e.target.value ? `?q=${encodeURIComponent(e.target.value)}` : "";
+                  router.replace(`${base}${qs}`, { scroll: false });
+                }}
                 placeholder="Search by title, business, suburb or postcode"
                 className="w-full rounded-xl border pl-9 pr-9 py-2"
               />
               <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" viewBox="0 0 24 24" aria-hidden>
-                <path
-                  d="M21 21l-4.3-4.3m1.1-5.1a6.8 6.8 0 11-13.6 0 6.8 6.8 0 0113.6 0z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  fill="none"
-                  strokeLinecap="round"
-                />
+                <path d="M21 21l-4.3-4.3m1.1-5.1a6.8 6.8 0 11-13.6 0 6.8 6.8 0 0113.6 0z"
+                  stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
               </svg>
               {q && (
                 <button
                   type="button"
-                  onClick={() => setQ("")}
+                  onClick={clearFilters}
                   className="absolute right-2 top-1.5 h-7 w-7 grid place-items-center rounded-lg hover:bg-gray-100"
                   aria-label="Clear search"
                 >
@@ -182,11 +199,7 @@ function FeedInner() {
             </label>
 
             {(q || stateFilter !== "ALL" || recOnly) && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
-              >
+              <button type="button" onClick={clearFilters} className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50">
                 Clear
               </button>
             )}
@@ -219,24 +232,31 @@ function FeedInner() {
               const chip = j.recommend
                 ? "bg-green-50 text-green-700 ring-1 ring-green-200"
                 : "bg-red-50 text-red-700 ring-1 ring-red-200";
+              const cost = costDisplay(j);
 
-              // Compute cost display from cost_* fields
-              const costDisplay =
-                j.cost_type === "exact" && j.cost_exact != null
-                  ? `Cost: $${Math.round(j.cost_exact).toLocaleString()}`
-                  : j.cost_type === "range" && j.cost_min != null && j.cost_max != null
-                  ? `Cost: $${Math.round(j.cost_min).toLocaleString()}–$${Math.round(j.cost_max).toLocaleString()}`
-                  : null;
-
-              const CardInner = (
+              const CardContent = (
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <span>{timeAgo(j.created_at ?? undefined)}</span>
-                    {j.recommend !== null && (
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 ${chip}`}>
-                        {j.recommend ? "Recommended" : "Not recommended"}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {j.recommend != null && (
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 ${chip}`}>
+                          {j.recommend ? "Recommended" : "Not recommended"}
+                        </span>
+                      )}
+                      {/* Edit shortcut if I own this */}
+                      {currentUserId && j.owner_id === currentUserId && (
+                        <Link
+                          href="/myposts"
+                          onClick={(e) => e.stopPropagation()}
+                          className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                          aria-label="Edit post"
+                          title="Edit post"
+                        >
+                          ⋯
+                        </Link>
+                      )}
+                    </div>
                   </div>
 
                   <h3 className="font-semibold text-base leading-snug line-clamp-2">
@@ -251,7 +271,7 @@ function FeedInner() {
                     {j.suburb}, {j.state} {j.postcode}
                   </p>
 
-                  {costDisplay && <p className="text-sm text-gray-700">{costDisplay}</p>}
+                  {cost && <p className="text-sm text-gray-700">{cost}</p>}
                 </div>
               );
 
@@ -266,16 +286,19 @@ function FeedInner() {
                   <button
                     onClick={() => {
                       setSelected(j);
-                      router.push(`/feed?id=${j.id}`, { scroll: false });
+                      const qs = new URLSearchParams();
+                      qs.set("id", j.id);
+                      if (q) qs.set("q", q);
+                      router.push(`/feed?${qs.toString()}`, { scroll: false });
                     }}
                     className="hidden w-full text-left lg:block"
                   >
-                    {CardInner}
+                    {CardContent}
                   </button>
 
                   {/* Mobile: open the public page */}
                   <Link href={`/post/${j.id}`} className="block w-full lg:hidden">
-                    {CardInner}
+                    {CardContent}
                   </Link>
                 </div>
               );
@@ -294,7 +317,7 @@ function FeedInner() {
   );
 }
 
-/* --- helpers --- */
+/* helpers */
 function timeAgo(iso?: string | null) {
   if (!iso) return "";
   const t = new Date(iso).getTime();
