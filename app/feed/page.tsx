@@ -2,7 +2,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import JobDetailCard from "@/components/JobDetailCard";
 
@@ -51,7 +51,7 @@ function since(iso: string) {
 }
 
 export default function FeedPage() {
-  // Wrap useSearchParams in Suspense for Next.js 15
+  // Wrap useSearchParams in Suspense (Next.js requirement)
   return (
     <Suspense fallback={<div className="text-sm text-gray-600">Loading…</div>}>
       <FeedInner />
@@ -61,18 +61,35 @@ export default function FeedPage() {
 
 function FeedInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // Parse initial values from URL
+  const initialQ = (searchParams.get("q") ?? "").trim();
+  const rawState = (searchParams.get("state") ?? "ALL").toUpperCase();
+  const initialState: (typeof STATES)[number] = (STATES as readonly string[]).includes(rawState)
+    ? (rawState as any)
+    : "ALL";
+  const initialRec = searchParams.get("rec") === "1";
 
   // filters
-  const [q, setQ] = useState((searchParams.get("q") ?? "").trim());
-  const [stateFilter, setStateFilter] = useState<(typeof STATES)[number]>("ALL");
-  const [onlyRecommended, setOnlyRecommended] = useState(false);
+  const [q, setQ] = useState(initialQ);
+  const [stateFilter, setStateFilter] = useState<(typeof STATES)[number]>(initialState);
+  const [onlyRecommended, setOnlyRecommended] = useState(initialRec);
 
-  // keep q in sync with URL ?q=
+  // keep local state in sync if URL changes (e.g., clicking suburb/business)
   useEffect(() => {
-    setQ((searchParams.get("q") ?? "").trim());
+    const nextQ = (searchParams.get("q") ?? "").trim();
+    const nextStateRaw = (searchParams.get("state") ?? "ALL").toUpperCase();
+    const nextState = (STATES as readonly string[]).includes(nextStateRaw) ? (nextStateRaw as any) : "ALL";
+    const nextRec = searchParams.get("rec") === "1";
+
+    setQ(nextQ);
+    setStateFilter(nextState);
+    setOnlyRecommended(nextRec);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // state counts
+  // state counts (respect q + recommended, independent of selected state)
   const [stateCounts, setStateCounts] = useState<Record<string, number>>({});
   const [allCount, setAllCount] = useState<number>(0);
 
@@ -86,25 +103,40 @@ function FeedInner() {
   // desktop selection
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // debounce q
+  // debounce search text
   const debouncedQ = useMemo(() => q.trim(), [q]);
 
-  // load list on filter change
+  // Sync URL with filters (so the select shows selected state, and sharing the page preserves filters)
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (debouncedQ) params.set("q", debouncedQ);
+    if (stateFilter !== "ALL") params.set("state", stateFilter);
+    if (onlyRecommended) params.set("rec", "1");
+
+    const next = params.toString();
+    const current = searchParams.toString();
+    if (next !== current) {
+      router.replace(next ? `/feed?${next}` : "/feed", { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQ, stateFilter, onlyRecommended]);
+
+  // Load list when filters change
   useEffect(() => {
     const t = setTimeout(() => {
       pageRef.current = 0;
       setItems([]);
       setCanLoadMore(true);
       void loadPage(true);
-    }, 250);
+    }, 200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQ, stateFilter, onlyRecommended]);
 
-  // initial load
+  // Initial load
   useEffect(() => { void loadPage(true); }, []); // eslint-disable-line
 
-  // keep selection valid
+  // Keep selection valid
   useEffect(() => {
     if (items.length === 0) { setSelectedId(null); return; }
     if (!selectedId || !items.find(i => i.id === selectedId)) {
@@ -112,7 +144,7 @@ function FeedInner() {
     }
   }, [items, selectedId]);
 
-  // counts (respect q + recommended)
+  // Load counts (reflect current q/recommended)
   useEffect(() => {
     let ignore = false;
     async function loadCounts() {
@@ -173,16 +205,27 @@ function FeedInner() {
     typeof window !== "undefined" &&
     window.matchMedia("(min-width: 1024px)").matches; // Tailwind lg breakpoint
 
+  function clearAll() {
+    setQ("");
+    setStateFilter("ALL");
+    setOnlyRecommended(false);
+    router.replace("/feed", { scroll: false });
+    pageRef.current = 0;
+    setItems([]);
+    setCanLoadMore(true);
+    void loadPage(true);
+  }
+
   return (
     <section className="grid gap-4 lg:grid-cols-12">
       {/* LEFT: search + filters + cards */}
       <div className="lg:col-span-5 lg:pr-2">
-        {/* Search and compact filters */}
+        {/* Search & filters */}
         <div className="rounded-2xl border bg-white p-3 md:p-4">
-          {/* Search */}
+          {/* Search with clear (✕) */}
           <div className="relative">
             <input
-              className="w-full rounded-xl border pl-9 pr-3 py-2"
+              className="w-full rounded-xl border pl-9 pr-9 py-2"
               placeholder="Search job, business, suburb, postcode"
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -190,9 +233,23 @@ function FeedInner() {
             <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" viewBox="0 0 24 24" aria-hidden>
               <path d="M21 21l-4.3-4.3m1.1-5.1a6.8 6.8 0 11-13.6 0 6.8 6.8 0 0113.6 0z" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
             </svg>
+            {q && (
+              <button
+                type="button"
+                onClick={() => setQ("")}
+                className="absolute right-2 top-1.5 h-7 w-7 grid place-items-center rounded-lg hover:bg-gray-100"
+                aria-label="Clear search"
+                title="Clear"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4 text-gray-500">
+                  <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
           </div>
 
-          <div className="mt-3 flex items-center justify-between gap-3">
+          {/* Compact filter row: State selector + Recommended + Clear filters */}
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex-1">
               <label className="sr-only" htmlFor="stateSelect">State</label>
               <select
@@ -210,14 +267,24 @@ function FeedInner() {
               </select>
             </div>
 
-            <label className="shrink-0 inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={onlyRecommended}
-                onChange={(e) => setOnlyRecommended(e.target.checked)}
-              />
-              Recommended only
-            </label>
+            <div className="flex items-center gap-3">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={onlyRecommended}
+                  onChange={(e) => setOnlyRecommended(e.target.checked)}
+                />
+                Recommended only
+              </label>
+
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-sm underline text-gray-700 hover:text-gray-900"
+              >
+                Clear filters
+              </button>
+            </div>
           </div>
         </div>
 
