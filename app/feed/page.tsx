@@ -45,13 +45,13 @@ function since(iso: string) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
-  if (days < 30) return `${monthsFromDays(days)}mo ago`;
-  return `${monthsFromDays(days)}mo ago`;
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
 }
-function monthsFromDays(days:number){ return Math.floor(days/30); }
 
 export default function FeedPage() {
-  // Wrap useSearchParams usage in Suspense
+  // Wrap useSearchParams in Suspense for Next.js 15
   return (
     <Suspense fallback={<div className="text-sm text-gray-600">Loading…</div>}>
       <FeedInner />
@@ -67,7 +67,7 @@ function FeedInner() {
   const [stateFilter, setStateFilter] = useState<(typeof STATES)[number]>("ALL");
   const [onlyRecommended, setOnlyRecommended] = useState(false);
 
-  // keep q in sync with URL changes (from clicking suburb/business)
+  // keep q in sync with URL ?q=
   useEffect(() => {
     setQ((searchParams.get("q") ?? "").trim());
   }, [searchParams]);
@@ -89,7 +89,7 @@ function FeedInner() {
   // debounce q
   const debouncedQ = useMemo(() => q.trim(), [q]);
 
-  // Load list whenever filters change
+  // load list on filter change
   useEffect(() => {
     const t = setTimeout(() => {
       pageRef.current = 0;
@@ -101,10 +101,10 @@ function FeedInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQ, stateFilter, onlyRecommended]);
 
-  // Initial load
+  // initial load
   useEffect(() => { void loadPage(true); }, []); // eslint-disable-line
 
-  // Keep selection valid
+  // keep selection valid
   useEffect(() => {
     if (items.length === 0) { setSelectedId(null); return; }
     if (!selectedId || !items.find(i => i.id === selectedId)) {
@@ -112,7 +112,7 @@ function FeedInner() {
     }
   }, [items, selectedId]);
 
-  // Load counts (reflect current q/recommended, independent of state)
+  // counts (respect q + recommended)
   useEffect(() => {
     let ignore = false;
     async function loadCounts() {
@@ -175,10 +175,11 @@ function FeedInner() {
 
   return (
     <section className="grid gap-4 lg:grid-cols-12">
-      {/* LEFT: search + filters + list */}
+      {/* LEFT: search + filters + cards */}
       <div className="lg:col-span-5 lg:pr-2">
-        {/* Search ABOVE the cards */}
+        {/* Search and compact filters */}
         <div className="rounded-2xl border bg-white p-3 md:p-4">
+          {/* Search */}
           <div className="relative">
             <input
               className="w-full rounded-xl border pl-9 pr-3 py-2"
@@ -191,7 +192,6 @@ function FeedInner() {
             </svg>
           </div>
 
-          {/* Compact filter row: State selector + Recommended toggle */}
           <div className="mt-3 flex items-center justify-between gap-3">
             <div className="flex-1">
               <label className="sr-only" htmlFor="stateSelect">State</label>
@@ -221,74 +221,71 @@ function FeedInner() {
           </div>
         </div>
 
-        {/* List (vertical layout, no dot; no overflow-hidden to avoid clipped corners) */}
-        <div className="mt-3 rounded-2xl border bg-white">
-          <ul className="divide-y">
-            {items.length === 0 && !loading && (
-              <li className="px-4 py-6 text-sm text-gray-600">No results</li>
-            )}
+        {/* Cards – separated with gaps, subtle selected state */}
+        <div className="mt-3 grid gap-2">
+          {items.length === 0 && !loading && (
+            <div className="rounded-xl border bg-white px-4 py-6 text-sm text-gray-600">
+              No results
+            </div>
+          )}
 
-            {items.map((j) => {
-              const link = `/post/${j.id}`;
-              const selectedStyle =
-                selectedId === j.id && isDesktop()
-                  ? "bg-gray-50 border-2 border-gray-900"
-                  : "hover:bg-gray-50 border-transparent";
+          {items.map((j) => {
+            const link = `/post/${j.id}`;
+            const selectedClasses =
+              selectedId === j.id && isDesktop()
+                ? "bg-indigo-50/60 border-indigo-300 ring-1 ring-indigo-200"
+                : "bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300";
 
-              return (
-                <li key={j.id} className="px-1">
-                  <button
-                    onClick={() => {
-                      if (isDesktop()) setSelectedId(j.id);
-                      else window.location.href = link;
-                    }}
-                    aria-current={selectedId === j.id ? "true" : undefined}
-                    className={[
-                      "w-full text-left px-4 py-3 transition rounded-xl border",
-                      selectedStyle,
-                    ].join(" ")}
-                  >
-                    {/* Vertical stack */}
-                    <div className="space-y-1.5">
-                      <h3 className="font-medium leading-tight line-clamp-2">
-                        {j.title || "Untitled job"}
-                      </h3>
+            return (
+              <button
+                key={j.id}
+                onClick={() => {
+                  if (isDesktop()) setSelectedId(j.id);
+                  else window.location.href = link;
+                }}
+                aria-current={selectedId === j.id ? "true" : undefined}
+                className={[
+                  "text-left rounded-xl border px-4 py-3 transition",
+                  selectedClasses,
+                ].join(" ")}
+              >
+                <div className="space-y-1.5">
+                  <h3 className="font-medium leading-tight line-clamp-2">
+                    {j.title || "Untitled job"}
+                  </h3>
 
-                      {j.business_name && (
-                        <div className="text-[13px] text-gray-700">
-                          {j.business_name}
-                        </div>
-                      )}
-
-                      <div className="text-[13px] text-gray-600">
-                        {j.suburb}, {j.state} {j.postcode}
-                      </div>
-
-                      <div className="flex items-center gap-2 text-[13px] text-gray-600">
-                        <span>{costLabel(j)}</span>
-                        <span className="ml-auto rounded-full px-2 py-0.5 text-[11px] border
-                          bg-gray-50 text-gray-700">
-                          {j.recommend ? "Recommended" : "Not recommended"}
-                        </span>
-                        <span className="text-[12px] text-gray-400">{since(j.created_at)}</span>
-                      </div>
+                  {j.business_name && (
+                    <div className="text-[13px] text-gray-700">
+                      {j.business_name}
                     </div>
-                  </button>
-                </li>
-              );
-            })}
+                  )}
 
-            {loading && (
-              <>
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <li key={i} className="px-4 py-3">
-                    <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse" />
-                    <div className="mt-2 h-3 w-2/3 bg-gray-200 rounded animate-pulse" />
-                  </li>
-                ))}
-              </>
-            )}
-          </ul>
+                  <div className="text-[13px] text-gray-600">
+                    {j.suburb}, {j.state} {j.postcode}
+                  </div>
+
+                  <div className="flex items-center gap-2 text-[13px] text-gray-600">
+                    <span>{costLabel(j)}</span>
+                    <span className="ml-auto rounded-full px-2 py-0.5 text-[11px] border bg-gray-50 text-gray-700">
+                      {j.recommend ? "Recommended" : "Not recommended"}
+                    </span>
+                    <span className="text-[12px] text-gray-400">{since(j.created_at)}</span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+
+          {loading && (
+            <>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-xl border bg-white px-4 py-3">
+                  <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse" />
+                  <div className="mt-2 h-3 w-2/3 bg-gray-200 rounded animate-pulse" />
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
         {!loading && canLoadMore && (
