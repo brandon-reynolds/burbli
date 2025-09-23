@@ -286,7 +286,7 @@ function DetailPane({ job }: { job: Job | null }) {
     try {
       if (typeof navigator !== "undefined" && (navigator as any).share) {
         await (navigator as any).share({
-          title: job.title || "Burbli job",
+          title: job?.title ?? "Burbli job", // <-- fix: guard against null
           text: "Found this job on Burbli — could be useful.",
           url: shareUrl,
         });
