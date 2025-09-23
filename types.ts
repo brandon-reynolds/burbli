@@ -1,20 +1,24 @@
+// /types.ts
+export type CostType = "exact" | "range" | "na" | null | undefined;
+
 export type Job = {
   id: string;
-  owner_id: string;
-  title: string;
+  owner_id: string | null;
+  created_at: string | null;
+
+  title: string | null;
+  business_name: string | null;
+
   suburb: string;
-  state: "VIC"|"NSW"|"QLD"|"SA"|"WA"|"TAS"|"ACT"|"NT";
-  postcode: string;
-  business_name: string;
-  recommend: boolean;
-  cost_type: "exact"|"range"|"hidden";
-  cost_amount?: number | null;
+  state: string;    // e.g. "VIC"
+  postcode: string; // stored as string to preserve leading zeroes
+
+  recommend: boolean | null;
+
+  cost_type: CostType;      // "exact" | "range" | "na" | null/undefined
+  cost_exact?: number | null;
   cost_min?: number | null;
   cost_max?: number | null;
+
   notes?: string | null;
-  is_approved: boolean;
-  created_at: string;
-  updated_at: string;
 };
-
-
