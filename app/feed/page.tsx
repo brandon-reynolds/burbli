@@ -4,22 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import JobDetailCard from "@/components/JobDetailCard";
-
-type Job = {
-  id: string;
-  created_at: string;
-  title: string;
-  business_name: string;
-  suburb: string;
-  state: string;
-  postcode: string;
-  recommend: boolean;
-  cost_type: string;
-  cost?: number;
-  cost_min?: number;
-  cost_max?: number;
-  notes?: string;
-};
+import type { Job } from "@/types"; // ← use the shared Job type
 
 export default function FeedPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -36,8 +21,14 @@ export default function FeedPage() {
         .from("jobs")
         .select("*")
         .order("created_at", { ascending: false });
-      if (error) console.error("Error loading jobs", error);
-      else setJobs(data || []);
+
+      if (error) {
+        console.error("Error loading jobs", error);
+        setJobs([]);
+      } else {
+        // Trust the shared Job shape
+        setJobs((data ?? []) as Job[]);
+      }
       setLoading(false);
     };
     fetchJobs();
@@ -48,39 +39,44 @@ export default function FeedPage() {
     router.push(`/feed?id=${job.id}`, { scroll: false });
   };
 
+  // Sync selection from ?id= on first load / navigation
   useEffect(() => {
     const id = params.get("id");
     if (id && jobs.length > 0) {
-      const found = jobs.find((j) => j.id === id);
-      if (found) setSelected(found);
+      const found = jobs.find((j) => j.id === id) || null;
+      setSelected(found);
     }
   }, [params, jobs]);
 
   return (
     <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      {/* Left side list */}
+      {/* Left: list */}
       <div className="lg:col-span-5 space-y-4">
-        {loading && <div>Loading...</div>}
+        {loading && <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>}
         {!loading &&
           jobs.map((job) => (
-            <div
+            <button
               key={job.id}
               onClick={() => handleSelect(job)}
-              className={`cursor-pointer rounded-2xl border p-4 ${
+              className={`w-full text-left rounded-2xl border p-4 focus:outline-none ${
                 selected?.id === job.id
-                  ? "border-blue-500"
+                  ? "border-blue-500 ring-2 ring-blue-100"
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
-              <div className="font-semibold">{job.title}</div>
-              <div className="text-sm text-gray-500">
-                {job.business_name} — {job.suburb}, {job.state} {job.postcode}
+              <div className="font-semibold truncate">{job.title || "Untitled"}</div>
+              <div className="text-sm text-gray-500 truncate">
+                {job.business_name ? `${job.business_name} — ` : ""}
+                {job.suburb}, {job.state} {job.postcode}
               </div>
-            </div>
+            </button>
           ))}
+        {!loading && jobs.length === 0 && (
+          <div className="rounded-2xl border bg-white p-6 text-gray-500">No jobs yet.</div>
+        )}
       </div>
 
-      {/* Right side detail */}
+      {/* Right: detail */}
       <div className="hidden lg:block lg:col-span-7">
         <div className="lg:sticky lg:top-24">
           {selected ? (
