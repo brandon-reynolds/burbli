@@ -12,19 +12,18 @@ export default function SiteHeader() {
   const isActive = (href: string) =>
     pathname === href ? "bg-gray-900 text-white" : "hover:bg-gray-100";
 
-  // Close the mobile menu when navigating with back/forward
   useEffect(() => {
-    function onPop() { setOpen(false); }
+    const onPop = () => setOpen(false);
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  function closeMenu() { setOpen(false); }
+  const closeMenu = () => setOpen(false);
 
   return (
     <header className="border-b bg-white/90 backdrop-blur sticky top-0 z-10">
       <div className="mx-auto max-w-6xl flex items-center justify-between p-4 md:p-6">
-        {/* Brand */}
+        {/* Brand -> home */}
         <a href="/" className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">BR</div>
           <div className="font-semibold text-lg">Burbli</div>
@@ -66,7 +65,7 @@ export default function SiteHeader() {
             <a href="/feed" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/feed")}`}>Browse jobs</a>
             <a href="/submit" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/submit")} bg-gray-900 text-white`}>Share project</a>
             <div className="mt-1 border-t pt-2">
-              <NavAuth />
+              <NavAuth onAction={closeMenu} />
             </div>
           </div>
         </div>
