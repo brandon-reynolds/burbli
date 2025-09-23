@@ -283,8 +283,25 @@ function DetailPane({ job }: { job: Job | null }) {
   }
 
   const isNegative = job.recommend === false;
-  const link = `/post/${job.id}`;
-  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}${link}` : link;
+  const shareUrl =
+    typeof window !== "undefined" ? `${window.location.origin}/post/${job.id}` : `/post/${job.id}`;
+
+  // accent styles so the detail pane feels distinct
+  const accent = isNegative
+    ? {
+        headerBg: "bg-red-50",
+        headerText: "text-red-800",
+        headerBorder: "border-red-200",
+        frame: "border-red-300",
+        chip: "bg-red-50 text-red-800 border-red-200",
+      }
+    : {
+        headerBg: "bg-green-50",
+        headerText: "text-green-800",
+        headerBorder: "border-green-200",
+        frame: "border-green-300",
+        chip: "bg-green-50 text-green-800 border-green-200",
+      };
 
   async function copyLink() {
     try {
@@ -297,37 +314,57 @@ function DetailPane({ job }: { job: Job | null }) {
   }
 
   return (
-    <article className="rounded-2xl border bg-white p-5 md:p-6">
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="text-lg font-semibold leading-tight">{job.title || "Untitled job"}</h2>
-        <span
-          className={[
-            "shrink-0 rounded-full px-2 py-0.5 text-xs border",
-            isNegative ? "bg-red-50 text-red-800 border-red-200" : "bg-green-50 text-green-800 border-green-200",
-          ].join(" ")}
-        >
-          {isNegative ? "Not recommended" : "Recommended"}
-        </span>
+    <article className={`rounded-3xl border-2 ${accent.frame} overflow-hidden`}>
+      {/* Colored header band */}
+      <div className={`px-5 py-4 border-b ${accent.headerBg} ${accent.headerBorder} ${accent.headerText}`}>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-2xl font-semibold leading-tight">{job.title || "Untitled job"}</h2>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs border ${accent.chip.split(" ").slice(2).join(" ")}`}>
+            {isNegative ? "Not recommended" : "Recommended"}
+          </span>
+        </div>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-600">
-        {job.business_name && <span className="rounded-lg border px-2 py-1 bg-gray-50">{job.business_name}</span>}
-        <span className="rounded-lg border px-2 py-1 bg-gray-50">{job.suburb}, {job.state} {job.postcode}</span>
-        <span className="rounded-lg border px-2 py-1 bg-gray-50">{costLabel(job)}</span>
-        <span className="text-xs text-gray-400 ml-auto">{since(job.created_at)}</span>
-      </div>
+      {/* Body */}
+      <div className="p-5 md:p-6">
+        {/* Primary facts row */}
+        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
+          {job.business_name && (
+            <span className="rounded-lg border px-2 py-1 bg-gray-50">{job.business_name}</span>
+          )}
+          <span className="rounded-lg border px-2 py-1 bg-gray-50">
+            {job.suburb}, {job.state} {job.postcode}
+          </span>
+          <span className="rounded-lg border px-2 py-1 bg-gray-50">{since(job.created_at)}</span>
+        </div>
 
-      {job.notes?.trim() && (
-        <div className="mt-4 text-sm text-gray-800 whitespace-pre-wrap">{job.notes.trim()}</div>
-      )}
+        {/* Cost block */}
+        <div className="mt-4 rounded-2xl border bg-gray-50 p-4">
+          <div className="text-xs uppercase tracking-wide text-gray-500">Cost</div>
+          <div className="mt-1 text-xl font-semibold">
+            {costLabel(job)}
+          </div>
+        </div>
 
-      <div className="mt-5 flex flex-wrap gap-2">
-        <button onClick={copyLink} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50">
-          {copied ? "Copied!" : "Copy link"}
-        </button>
-        <a href={link} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50">
-          View public page
-        </a>
+        {/* Notes */}
+        {job.notes?.trim() && (
+          <div className="mt-5">
+            <div className="text-sm text-gray-500">Notes</div>
+            <div className="mt-2 text-[15px] leading-6 text-gray-900 whitespace-pre-wrap">
+              {job.notes.trim()}
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="mt-6 flex flex-wrap gap-2">
+          <button
+            onClick={copyLink}
+            className="px-3 py-1.5 rounded-xl bg-gray-900 text-white hover:bg-gray-800"
+          >
+            {copied ? "Copied!" : "Copy link"}
+          </button>
+        </div>
       </div>
     </article>
   );
