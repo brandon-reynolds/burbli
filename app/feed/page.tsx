@@ -1,7 +1,7 @@
 // app/feed/page.tsx
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -33,6 +33,16 @@ function FeedInner() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("ALL");
   const [recOnly, setRecOnly] = useState(false);
 
+  // track media query for desktop
+  const isDesktopRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    // set once on mount; we only need a hint to avoid auto-selecting on mobile
+    if (typeof window !== "undefined") {
+      isDesktopRef.current = window.matchMedia("(min-width: 1024px)").matches;
+    }
+  }, []);
+
   // Load all jobs
   useEffect(() => {
     let ignore = false;
@@ -52,13 +62,6 @@ function FeedInner() {
       ignore = true;
     };
   }, []);
-
-  // Restore selection from ?id=
-  useEffect(() => {
-    const id = params.get("id");
-    if (!id || jobs.length === 0) return;
-    setSelected(jobs.find((j) => j.id === id) ?? null);
-  }, [params, jobs]);
 
   // Base filtered by search + recommended (used for state counters)
   const baseFiltered = useMemo(() => {
@@ -103,6 +106,24 @@ function FeedInner() {
     return baseFiltered.filter((j) => stateFilter === "ALL" || j.state === stateFilter);
   }, [baseFiltered, stateFilter]);
 
+  // Restore selection from ?id= if present
+  useEffect(() => {
+    const id = params.get("id");
+    if (!id || jobs.length === 0) return;
+    setSelected(jobs.find((j) => j.id === id) ?? null);
+  }, [params, jobs]);
+
+  // Auto-select first card on desktop (when none selected)
+  useEffect(() => {
+    if (!isDesktopRef.current) return; // don't auto-select on mobile
+    if (selected) return;
+    if (!loading && filtered.length > 0) {
+      setSelected(filtered[0]);
+      router.push(`/feed?id=${filtered[0].id}`, { scroll: false });
+    }
+    // we intentionally depend on filtered and loading
+  }, [filtered, loading, selected, router]);
+
   // Clear all filters & selection
   function clearFilters() {
     setQ("");
@@ -123,7 +144,7 @@ function FeedInner() {
       {/* Filters card */}
       <div className="rounded-2xl border bg-white p-3 md:p-4">
         <div className="flex flex-col gap-3">
-          {/* Row 1: search + clear */}
+          {/* Row 1: search + recommended + clear */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
             <div className="relative flex-1">
               <input
@@ -155,7 +176,7 @@ function FeedInner() {
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
               <input
                 id="recOnly"
                 type="checkbox"
@@ -163,10 +184,8 @@ function FeedInner() {
                 onChange={(e) => setRecOnly(e.target.checked)}
                 className="h-4 w-4 rounded border-gray-300"
               />
-              <label htmlFor="recOnly" className="text-sm text-gray-700">
-                Recommended only
-              </label>
-            </div>
+              Recommended only
+            </label>
 
             {(q || stateFilter !== "ALL" || recOnly) && (
               <button
@@ -209,43 +228,64 @@ function FeedInner() {
           ) : filtered.length === 0 ? (
             <div className="rounded-2xl border bg-white p-6 text-gray-500">No results.</div>
           ) : (
-            filtered.map((j) => (
-              <div
-                key={j.id}
-                className={`relative rounded-2xl border bg-white p-4 transition ${
-                  selected?.id === j.id
-                    ? "border-blue-400 ring-2 ring-blue-100"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                {/* Desktop: select into right panel */}
-                <button
-                  onClick={() => {
-                    setSelected(j);
-                    router.push(`/feed?id=${j.id}`, { scroll: false });
-                  }}
-                  className="hidden w-full text-left lg:block"
-                >
-                  <div className="font-medium line-clamp-2">{j.title || "Untitled"}</div>
-                  <div className="mt-1 text-sm text-gray-600">
-                    {j.business_name ? `${j.business_name} • ` : ""}
-                    {j.suburb}, {j.state} {j.postcode}
-                  </div>
-                </button>
+            filtered.map((j) => {
+              const isActive = selected?.id === j.id;
 
-                {/* Mobile: open the public page */}
-                <Link
-                  href={`/post/${j.id}`}
-                  className="block w-full text-left lg:hidden"
-                >
-                  <div className="font-medium line-clamp-2">{j.title || "Untitled"}</div>
+              const chip = j.recommend
+                ? "bg-green-50 text-green-700 ring-1 ring-green-200"
+                : "bg-red-50 text-red-700 ring-1 ring-red-200";
+
+              // Vertical, clearer layout
+              const CardInner = (
+                <div className="w-full text-left">
+                  {/* Top meta row */}
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>{timeAgo(j.created_at ?? undefined)}</span>
+                    {j.recommend !== null && (
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 ${chip}`}>
+                        {j.recommend ? "Recommended" : "Not recommended"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Title */}
+                  <div className="mt-2 font-semibold leading-snug line-clamp-2">
+                    {j.title || "Untitled"}
+                  </div>
+
+                  {/* Location / business */}
                   <div className="mt-1 text-sm text-gray-600">
                     {j.business_name ? `${j.business_name} • ` : ""}
                     {j.suburb}, {j.state} {j.postcode}
                   </div>
-                </Link>
-              </div>
-            ))
+                </div>
+              );
+
+              return (
+                <div
+                  key={j.id}
+                  className={`relative rounded-2xl border bg-white p-4 transition ${
+                    isActive ? "border-blue-400 ring-2 ring-blue-100" : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  {/* Desktop: select into right panel */}
+                  <button
+                    onClick={() => {
+                      setSelected(j);
+                      router.push(`/feed?id=${j.id}`, { scroll: false });
+                    }}
+                    className="hidden w-full lg:block"
+                  >
+                    {CardInner}
+                  </button>
+
+                  {/* Mobile: open the public page */}
+                  <Link href={`/post/${j.id}`} className="block w-full lg:hidden">
+                    {CardInner}
+                  </Link>
+                </div>
+              );
+            })
           )}
         </div>
 
@@ -258,4 +298,19 @@ function FeedInner() {
       </div>
     </section>
   );
+}
+
+/* --- helpers --- */
+function timeAgo(iso?: string | null) {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  const diff = Math.max(0, Date.now() - t);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
 }
