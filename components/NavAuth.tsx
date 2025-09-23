@@ -1,13 +1,12 @@
 // components/NavAuth.tsx
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 export type NavAuthProps = {
-  variant?: "inline" | "menu";
-  currentPath?: string;
-  onAction?: () => void;
+  onAction?: () => void; // optional hook to close mobile sheet
 };
 
 export default function NavAuth({ onAction }: NavAuthProps) {
@@ -15,6 +14,7 @@ export default function NavAuth({ onAction }: NavAuthProps) {
 
   useEffect(() => {
     let ignore = false;
+
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!ignore) setUserId(user?.id ?? null);
@@ -24,6 +24,7 @@ export default function NavAuth({ onAction }: NavAuthProps) {
       });
       return () => sub.subscription.unsubscribe();
     })();
+
     return () => { ignore = true; };
   }, []);
 
@@ -31,9 +32,9 @@ export default function NavAuth({ onAction }: NavAuthProps) {
 
   if (!userId) {
     return (
-      <a href="/signin" onClick={after} className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
+      <Link href="/signin" onClick={after} className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
         Sign in
-      </a>
+      </Link>
     );
   }
 
@@ -45,9 +46,9 @@ export default function NavAuth({ onAction }: NavAuthProps) {
 
   return (
     <>
-      <a href="/myposts" onClick={after} className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
+      <Link href="/myposts" onClick={after} className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
         My posts
-      </a>
+      </Link>
       <button onClick={signOut} className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
         Sign out
       </button>
