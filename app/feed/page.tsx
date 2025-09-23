@@ -1,7 +1,7 @@
 // app/feed/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import JobDetailCard from "@/components/JobDetailCard";
@@ -50,13 +50,26 @@ function since(iso: string) {
 }
 
 export default function FeedPage() {
+  // Wrap the client logic in Suspense so useSearchParams() is safe.
+  return (
+    <Suspense fallback={<div className="text-sm text-gray-600">Loading…</div>}>
+      <FeedInner />
+    </Suspense>
+  );
+}
+
+function FeedInner() {
   const searchParams = useSearchParams();
-  const initialQ = (searchParams.get("q") ?? "").trim();
 
   // filters
-  const [q, setQ] = useState(initialQ);
+  const [q, setQ] = useState((searchParams.get("q") ?? "").trim());
   const [stateFilter, setStateFilter] = useState<(typeof STATES)[number]>("ALL");
   const [onlyRecommended, setOnlyRecommended] = useState(false);
+
+  // keep q in sync if URL ?q= changes (e.g., clicking suburb/business)
+  useEffect(() => {
+    setQ((searchParams.get("q") ?? "").trim());
+  }, [searchParams]);
 
   // data / paging
   const [items, setItems] = useState<Job[]>([]);
