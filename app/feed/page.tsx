@@ -22,7 +22,8 @@ type Job = {
   created_at: string;
 };
 
-const STATES = ["ALL","VIC","NSW","QLD","SA","WA","TAS","ACT","NT"] as const;
+const STATE_LIST = ["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"] as const;
+const STATES = ["ALL", ...STATE_LIST] as const;
 
 const fmtAUD = (cents?: number | null) =>
   typeof cents === "number"
@@ -44,13 +45,13 @@ function since(iso: string) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
+  if (days < 30) return `${monthsFromDays(days)}mo ago`;
+  return `${monthsFromDays(days)}mo ago`;
 }
+function monthsFromDays(days:number){ return Math.floor(days/30); }
 
 export default function FeedPage() {
-  // Wrap the client logic in Suspense so useSearchParams() is safe.
+  // Wrap useSearchParams usage in Suspense
   return (
     <Suspense fallback={<div className="text-sm text-gray-600">Loading…</div>}>
       <FeedInner />
@@ -66,10 +67,14 @@ function FeedInner() {
   const [stateFilter, setStateFilter] = useState<(typeof STATES)[number]>("ALL");
   const [onlyRecommended, setOnlyRecommended] = useState(false);
 
-  // keep q in sync if URL ?q= changes (e.g., clicking suburb/business)
+  // keep q in sync with URL changes (from clicking suburb/business)
   useEffect(() => {
     setQ((searchParams.get("q") ?? "").trim());
   }, [searchParams]);
+
+  // state counts
+  const [stateCounts, setStateCounts] = useState<Record<string, number>>({});
+  const [allCount, setAllCount] = useState<number>(0);
 
   // data / paging
   const [items, setItems] = useState<Job[]>([]);
@@ -78,11 +83,13 @@ function FeedInner() {
   const pageRef = useRef(0);
   const PAGE = 16;
 
-  // desktop selection (hidden on mobile)
+  // desktop selection
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // debounce q
   const debouncedQ = useMemo(() => q.trim(), [q]);
+
+  // Load list whenever filters change
   useEffect(() => {
     const t = setTimeout(() => {
       pageRef.current = 0;
@@ -94,9 +101,10 @@ function FeedInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQ, stateFilter, onlyRecommended]);
 
+  // Initial load
   useEffect(() => { void loadPage(true); }, []); // eslint-disable-line
 
-  // keep selection valid on desktop
+  // Keep selection valid
   useEffect(() => {
     if (items.length === 0) { setSelectedId(null); return; }
     if (!selectedId || !items.find(i => i.id === selectedId)) {
@@ -104,27 +112,50 @@ function FeedInner() {
     }
   }, [items, selectedId]);
 
+  // Load counts (reflect current q/recommended, independent of state)
+  useEffect(() => {
+    let ignore = false;
+    async function loadCounts() {
+      const p = debouncedQ ? `%${debouncedQ}%` : null;
+      const promises = STATE_LIST.map(async (s) => {
+        let qy = supabase.from("jobs").select("id", { count: "exact", head: true }).eq("state", s);
+        if (onlyRecommended) qy = qy.eq("recommend", true);
+        if (p) qy = qy.or(`title.ilike.${p},business_name.ilike.${p},suburb.ilike.${p},postcode.ilike.${p}`);
+        const { count, error } = await qy;
+        return [s, error ? 0 : (count ?? 0)] as const;
+      });
+      const results = await Promise.all(promises);
+      if (ignore) return;
+      const map: Record<string, number> = {};
+      let total = 0;
+      for (const [s, c] of results) { map[s] = c; total += c; }
+      setStateCounts(map);
+      setAllCount(total);
+    }
+    loadCounts();
+    return () => { ignore = true; };
+  }, [debouncedQ, onlyRecommended]);
+
   async function loadPage(reset = false) {
     if (loading) return;
     if (!canLoadMore && !reset) return;
-
     setLoading(true);
 
-    let query = supabase
+    let qy = supabase
       .from("jobs")
       .select("id,title,business_name,suburb,state,postcode,recommend,cost_type,cost_amount,cost_min,cost_max,notes,created_at")
       .order("created_at", { ascending: false });
 
-    if (stateFilter !== "ALL") query = query.eq("state", stateFilter);
-    if (onlyRecommended) query = query.eq("recommend", true);
+    if (stateFilter !== "ALL") qy = qy.eq("state", stateFilter);
+    if (onlyRecommended) qy = qy.eq("recommend", true);
     if (debouncedQ) {
       const p = `%${debouncedQ}%`;
-      query = query.or(`title.ilike.${p},business_name.ilike.${p},suburb.ilike.${p},postcode.ilike.${p}`);
+      qy = qy.or(`title.ilike.${p},business_name.ilike.${p},suburb.ilike.${p},postcode.ilike.${p}`);
     }
 
     const offset = reset ? 0 : pageRef.current * PAGE;
     const to = offset + PAGE - 1;
-    const { data, error } = await query.range(offset, to);
+    const { data, error } = await qy.range(offset, to);
 
     if (!error && data) {
       setItems(prev => reset ? data : [...prev, ...data]);
@@ -138,17 +169,16 @@ function FeedInner() {
 
   const selected = items.find(i => i.id === selectedId) || null;
 
-  // helper to decide mobile vs desktop at click time
   const isDesktop = () =>
     typeof window !== "undefined" &&
     window.matchMedia("(min-width: 1024px)").matches; // Tailwind lg breakpoint
 
   return (
     <section className="grid gap-4 lg:grid-cols-12">
-      {/* LEFT: filters + list */}
+      {/* LEFT: search + filters + list */}
       <div className="lg:col-span-5 lg:pr-2">
+        {/* Search ABOVE the cards */}
         <div className="rounded-2xl border bg-white p-3 md:p-4">
-          {/* Search */}
           <div className="relative">
             <input
               className="w-full rounded-xl border pl-9 pr-3 py-2"
@@ -161,34 +191,37 @@ function FeedInner() {
             </svg>
           </div>
 
-          {/* State pills */}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {STATES.map((s) => (
-              <button
-                key={s}
-                onClick={() => setStateFilter(s)}
-                className={[
-                  "px-3 py-1.5 rounded-full text-xs border",
-                  stateFilter === s ? "bg-gray-900 text-white border-gray-900" : "hover:bg-gray-50",
-                ].join(" ")}
+          {/* Compact filter row: State selector + Recommended toggle */}
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <label className="sr-only" htmlFor="stateSelect">State</label>
+              <select
+                id="stateSelect"
+                className="w-full rounded-xl border px-3 py-2 text-sm"
+                value={stateFilter}
+                onChange={(e) => setStateFilter(e.target.value as any)}
               >
-                {s}
-              </button>
-            ))}
-          </div>
+                <option value="ALL">All states ({allCount})</option>
+                {STATE_LIST.map(s => (
+                  <option key={s} value={s}>
+                    {s} ({stateCounts[s] ?? 0})
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Recommended only */}
-          <label className="mt-3 inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={onlyRecommended}
-              onChange={(e) => setOnlyRecommended(e.target.checked)}
-            />
-            Recommended only
-          </label>
+            <label className="shrink-0 inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={onlyRecommended}
+                onChange={(e) => setOnlyRecommended(e.target.checked)}
+              />
+              Recommended only
+            </label>
+          </div>
         </div>
 
-        {/* List (no overflow-hidden to avoid clipped corners) */}
+        {/* List (vertical layout, no dot; no overflow-hidden to avoid clipped corners) */}
         <div className="mt-3 rounded-2xl border bg-white">
           <ul className="divide-y">
             {items.length === 0 && !loading && (
@@ -203,11 +236,11 @@ function FeedInner() {
                   : "hover:bg-gray-50 border-transparent";
 
               return (
-                <li key={j.id} className="px-1"> {/* tiny padding prevents visual clipping */}
+                <li key={j.id} className="px-1">
                   <button
                     onClick={() => {
                       if (isDesktop()) setSelectedId(j.id);
-                      else window.location.href = link; // mobile: navigate to details page
+                      else window.location.href = link;
                     }}
                     aria-current={selectedId === j.id ? "true" : undefined}
                     className={[
@@ -215,39 +248,29 @@ function FeedInner() {
                       selectedStyle,
                     ].join(" ")}
                   >
-                    <div className="flex items-start gap-2">
-                      <span
-                        className={[
-                          "mt-1 inline-block h-2 w-2 rounded-full",
-                          j.recommend ? "bg-green-600" : "bg-red-600",
-                        ].join(" ")}
-                        aria-hidden
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-start gap-3">
-                          <h3 className="font-medium leading-tight line-clamp-1">
-                            {j.title || "Untitled job"}
-                          </h3>
-                          <span className="ml-auto shrink-0 text-xs text-gray-400">
-                            {since(j.created_at)}
-                          </span>
-                        </div>
+                    {/* Vertical stack */}
+                    <div className="space-y-1.5">
+                      <h3 className="font-medium leading-tight line-clamp-2">
+                        {j.title || "Untitled job"}
+                      </h3>
 
-                        <div className="mt-1 text-[13px] text-gray-600 flex flex-wrap items-center gap-x-3 gap-y-1">
-                          {j.business_name && <span className="truncate">{j.business_name}</span>}
-                          <span className="truncate">{j.suburb}, {j.state} {j.postcode}</span>
-                          <span className="truncate">{costLabel(j)}</span>
-                          <span
-                            className={[
-                              "ml-auto rounded-full px-2 py-0.5 text-[11px] border",
-                              j.recommend
-                                ? "bg-green-50 text-green-800 border-green-200"
-                                : "bg-red-50 text-red-800 border-red-200",
-                            ].join(" ")}
-                          >
-                            {j.recommend ? "Recommended" : "Not recommended"}
-                          </span>
+                      {j.business_name && (
+                        <div className="text-[13px] text-gray-700">
+                          {j.business_name}
                         </div>
+                      )}
+
+                      <div className="text-[13px] text-gray-600">
+                        {j.suburb}, {j.state} {j.postcode}
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[13px] text-gray-600">
+                        <span>{costLabel(j)}</span>
+                        <span className="ml-auto rounded-full px-2 py-0.5 text-[11px] border
+                          bg-gray-50 text-gray-700">
+                          {j.recommend ? "Recommended" : "Not recommended"}
+                        </span>
+                        <span className="text-[12px] text-gray-400">{since(j.created_at)}</span>
                       </div>
                     </div>
                   </button>
@@ -280,9 +303,11 @@ function FeedInner() {
         )}
       </div>
 
-      {/* RIGHT: detail pane (hidden on mobile) */}
+      {/* RIGHT: detail pane (sticky on desktop) */}
       <div className="hidden lg:block lg:col-span-7">
-        <JobDetailCard job={selected} />
+        <div className="lg:sticky lg:top-24">
+          <JobDetailCard job={selected} />
+        </div>
       </div>
     </section>
   );
