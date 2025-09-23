@@ -34,7 +34,7 @@ function FeedInner() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("ALL");
   const [recOnly, setRecOnly] = useState(false);
 
-  // desktop hint (avoid auto-select on mobile)
+  // to avoid auto-select on mobile
   const isDesktopRef = useRef<boolean>(false);
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -42,7 +42,7 @@ function FeedInner() {
     }
   }, []);
 
-  // Get signed-in user id (for showing edit shortcuts)
+  // signed-in user id (for edit shortcut)
   useEffect(() => {
     let ignore = false;
     (async () => {
@@ -52,7 +52,7 @@ function FeedInner() {
     return () => { ignore = true; };
   }, []);
 
-  // Load jobs
+  // load jobs
   useEffect(() => {
     let ignore = false;
     (async () => {
@@ -67,34 +67,48 @@ function FeedInner() {
         setLoading(false);
       }
     })();
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, []);
 
-  // Sync q and id from URL so links like /feed?q=Epping work
+  // Sync FROM URL → state (guarded to avoid loops)
+  const didInitRef = useRef(false);
   useEffect(() => {
     const urlQ = params.get("q") ?? "";
-    setQ(urlQ);
+    const urlId = params.get("id");
 
-    const id = params.get("id");
-    if (id && jobs.length > 0) {
-      setSelected(jobs.find((j) => j.id === id) ?? null);
+    // initialize q from URL only once on mount, or when it actually differs
+    if (!didInitRef.current || urlQ !== q) {
+      didInitRef.current = true;
+      setQ(urlQ);
     }
-  }, [params, jobs]);
 
-  // Filtered sets
+    if (urlId && jobs.length > 0) {
+      const found = jobs.find((j) => j.id === urlId) ?? null;
+      setSelected(found);
+    }
+  }, [params, jobs]); // q is intentionally omitted to prevent loops
+
+  // Debounce URL updates when user types (STATE → URL)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const base = "/feed";
+      const qs = new URLSearchParams();
+      if (q) qs.set("q", q);
+      if (selected?.id) qs.set("id", selected.id);
+      router.replace(`${base}${qs.toString() ? `?${qs.toString()}` : ""}`, { scroll: false });
+    }, 250); // debounce
+    return () => clearTimeout(t);
+  }, [q, selected?.id, router]);
+
+  // filter sets
   const baseFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return jobs.filter((j) => {
       if (recOnly && !j.recommend) return false;
       if (!needle) return true;
-      const hay = [
-        j.title ?? "",
-        j.business_name ?? "",
-        j.suburb ?? "",
-        j.postcode ?? "",
-      ].join(" ").toLowerCase();
+      const hay = [j.title ?? "", j.business_name ?? "", j.suburb ?? "", j.postcode ?? ""]
+        .join(" ")
+        .toLowerCase();
       return hay.includes(needle);
     });
   }, [jobs, q, recOnly]);
@@ -115,22 +129,22 @@ function FeedInner() {
     [baseFiltered, stateFilter]
   );
 
-  // Auto-select first on desktop when none selected
+  // auto-select first on desktop
   useEffect(() => {
     if (!isDesktopRef.current) return;
     if (selected) return;
     if (!loading && filtered.length > 0) {
       setSelected(filtered[0]);
-      router.push(`/feed?id=${filtered[0].id}${q ? `&q=${encodeURIComponent(q)}` : ""}`, { scroll: false });
+      // URL will be updated by the debounced effect above
     }
-  }, [filtered, loading, selected, router, q]);
+  }, [filtered, loading, selected]);
 
   function clearFilters() {
     setQ("");
     setStateFilter("ALL");
     setRecOnly(false);
     setSelected(null);
-    router.push("/feed", { scroll: false });
+    router.replace("/feed", { scroll: false });
   }
 
   const pill = (active: boolean) =>
@@ -138,13 +152,11 @@ function FeedInner() {
       active ? "bg-gray-900 text-white border-gray-900" : "bg-white hover:bg-gray-50"
     }`;
 
-  // Small helper to compute cost for left cards
   function costDisplay(j: Job) {
     if (j.cost_type === "exact" && j.cost_exact != null)
       return `$${Math.round(j.cost_exact).toLocaleString()}`;
     if (j.cost_type === "range" && j.cost_min != null && j.cost_max != null)
       return `$${Math.round(j.cost_min).toLocaleString()}–$${Math.round(j.cost_max).toLocaleString()}`;
-    // legacy fallbacks just in case
     const anyJob = j as Record<string, any>;
     if (typeof anyJob.cost === "number") return `$${Math.round(anyJob.cost).toLocaleString()}`;
     if (typeof anyJob.cost_text === "string" && anyJob.cost_text.trim()) return anyJob.cost_text.trim();
@@ -160,13 +172,7 @@ function FeedInner() {
             <div className="relative flex-1">
               <input
                 value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  // keep URL in sync with typing
-                  const base = "/feed";
-                  const qs = e.target.value ? `?q=${encodeURIComponent(e.target.value)}` : "";
-                  router.replace(`${base}${qs}`, { scroll: false });
-                }}
+                onChange={(e) => setQ(e.target.value)}
                 placeholder="Search by title, business, suburb or postcode"
                 className="w-full rounded-xl border pl-9 pr-9 py-2"
               />
@@ -244,7 +250,6 @@ function FeedInner() {
                           {j.recommend ? "Recommended" : "Not recommended"}
                         </span>
                       )}
-                      {/* Edit shortcut if I own this */}
                       {currentUserId && j.owner_id === currentUserId && (
                         <Link
                           href="/myposts"
@@ -282,15 +287,9 @@ function FeedInner() {
                     isActive ? "border-blue-400 ring-2 ring-blue-100" : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
-                  {/* Desktop: select into right panel */}
+                  {/* Desktop: select into right panel (URL id sync happens via debounced effect) */}
                   <button
-                    onClick={() => {
-                      setSelected(j);
-                      const qs = new URLSearchParams();
-                      qs.set("id", j.id);
-                      if (q) qs.set("q", q);
-                      router.push(`/feed?${qs.toString()}`, { scroll: false });
-                    }}
+                    onClick={() => setSelected(j)}
                     className="hidden w-full text-left lg:block"
                   >
                     {CardContent}
