@@ -34,7 +34,9 @@ export default function PublicPostPage() {
       setLoading(true);
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,title,business_name,suburb,state,postcode,recommend,cost_type,cost_amount,cost_min,cost_max,notes,created_at")
+        .select(
+          "id,title,business_name,suburb,state,postcode,recommend,cost_type,cost_amount,cost_min,cost_max,notes,created_at"
+        )
         .eq("id", id)
         .maybeSingle();
 
@@ -44,8 +46,16 @@ export default function PublicPostPage() {
       }
     }
     if (id) load();
-    return () => { ignore = true; };
+    return () => {
+      ignore = true;
+    };
   }, [id]);
+
+  function goBack() {
+    if (typeof window === "undefined") return;
+    if (window.history.length > 1) window.history.back();
+    else window.location.href = "/feed";
+  }
 
   if (loading) {
     return (
@@ -62,10 +72,36 @@ export default function PublicPostPage() {
     return (
       <div className="rounded-2xl border bg-white p-6">
         <div className="text-sm text-gray-700">This job could not be found.</div>
-        <a href="/feed" className="mt-3 inline-block text-sm underline">Back to browse</a>
+        <a href="/feed" className="mt-3 inline-block text-sm underline">
+          Back to browse
+        </a>
       </div>
     );
   }
 
-  return <JobDetailCard job={job} />;
+  return (
+    <div className="space-y-3">
+      {/* Mobile back bar */}
+      <div className="md:hidden">
+        <button
+          onClick={goBack}
+          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 border hover:bg-gray-50"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5 text-gray-700" aria-hidden>
+            <path
+              d="M15 6l-6 6 6 6"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </svg>
+          <span className="text-sm">Back</span>
+        </button>
+      </div>
+
+      {/* Detail card (public variant = smaller CTAs under a divider) */}
+      <JobDetailCard job={job} variant="public" />
+    </div>
+  );
 }
