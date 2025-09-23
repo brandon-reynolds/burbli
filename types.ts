@@ -1,4 +1,3 @@
-// /types.ts
 export type CostType = "exact" | "range" | "na" | null | undefined;
 
 export type Job = {
@@ -10,12 +9,12 @@ export type Job = {
   business_name: string | null;
 
   suburb: string;
-  state: string;    // e.g. "VIC"
-  postcode: string; // stored as string to preserve leading zeroes
+  state: string;
+  postcode: string;
 
   recommend: boolean | null;
 
-  cost_type: CostType;      // "exact" | "range" | "na" | null/undefined
+  cost_type: CostType;
   cost_exact?: number | null;
   cost_min?: number | null;
   cost_max?: number | null;
