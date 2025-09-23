@@ -7,25 +7,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="min-h-screen bg-gray-50 text-gray-900">
-        {/* Header: tighter on mobile, no tagline, nicer logo, client-driven nav */}
-        <header className="sticky top-0 z-50 border-b bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-          <div className="mx-auto max-w-6xl flex items-center justify-between px-3 py-3 md:px-6 md:py-4">
-            {/* Brand (now clickable link to Home) */}
-            <Link
-              href="/"
-              aria-label="Go to Home"
-              className="flex items-center gap-2 md:gap-3 group"
-            >
-              <div className="h-9 w-9 md:h-10 md:w-10 rounded-xl bg-gradient-to-br from-indigo-600 to-fuchsia-600 shadow-sm grid place-items-center transition-transform group-hover:scale-105">
-                <span className="text-white font-bold text-base md:text-lg leading-none">B</span>
+        <header className="border-b bg-white/90 backdrop-blur sticky top-0 z-10">
+          <div className="mx-auto max-w-6xl flex items-center justify-between p-4 md:p-6">
+            <Link href="/" className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">BR</div>
+              <div>
+                <h1 className="font-semibold text-lg">Burbli</h1>
               </div>
-              <span className="font-semibold text-base md:text-lg tracking-tight">
-                Burbli
-              </span>
             </Link>
-
-            {/* Navigation (desktop + mobile) */}
-            <SiteNav />
+            <nav className="flex items-center gap-2">
+              <Link href="/" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">Home</Link>
+              <Link href="/feed" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">Browse jobs</Link>
+              <Link href="/submit" className="px-3 py-2 rounded-xl text-sm bg-gray-900 text-white">Share project</Link>
+              <Link href="/signin" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">Sign in</Link>
+            </nav>
           </div>
         </header>
 
@@ -35,9 +30,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="mx-auto max-w-6xl p-6 text-xs text-gray-500 flex flex-col md:flex-row gap-2 md:items-center md:justify-between">
             <div>© {new Date().getFullYear()} Burbli — Made in Melbourne</div>
             <div className="flex gap-4">
-              <a className="underline" href="/privacy">Privacy</a>
-              <a className="underline" href="/terms">Terms</a>
-              <a className="underline" href="/contact">Contact</a>
+              <a className="underline" href="#">Privacy</a>
+              <a className="underline" href="#">Terms</a>
+              <a className="underline" href="#">Contact</a>
             </div>
           </div>
         </footer>
