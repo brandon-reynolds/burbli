@@ -5,9 +5,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 export type NavAuthProps = {
-  variant?: "inline" | "menu";     // backward-compat only
-  currentPath?: string;            // backward-compat only
-  onAction?: () => void;           // call to close mobile menu, etc.
+  variant?: "inline" | "menu";
+  currentPath?: string;
+  onAction?: () => void;
 };
 
 export default function NavAuth({ onAction }: NavAuthProps) {
@@ -27,18 +27,11 @@ export default function NavAuth({ onAction }: NavAuthProps) {
     return () => { ignore = true; };
   }, []);
 
-  function handleAfterClick() {
-    // helpful for closing a mobile sheet if parent passed onAction
-    try { onAction?.(); } catch {}
-  }
+  const after = () => { try { onAction?.(); } catch {} };
 
   if (!userId) {
     return (
-      <a
-        href="/signin"
-        onClick={handleAfterClick}
-        className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
-      >
+      <a href="/signin" onClick={after} className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
         Sign in
       </a>
     );
@@ -46,23 +39,16 @@ export default function NavAuth({ onAction }: NavAuthProps) {
 
   async function signOut() {
     await supabase.auth.signOut();
-    handleAfterClick();
+    after();
     if (typeof window !== "undefined") window.location.reload();
   }
 
   return (
     <>
-      <a
-        href="/myposts"
-        onClick={handleAfterClick}
-        className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
-      >
+      <a href="/myposts" onClick={after} className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
         My posts
       </a>
-      <button
-        onClick={signOut}
-        className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
-      >
+      <button onClick={signOut} className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
         Sign out
       </button>
     </>
