@@ -19,23 +19,15 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     typeof window !== "undefined" ? `${window.location.origin}/post/${job.id}` : "";
 
   const costDisplay = useMemo(() => {
-    // Primary (current schema)
     if (job.cost_type === "exact" && job.cost_exact != null) {
       return `$${Math.round(job.cost_exact).toLocaleString()}`;
     }
     if (job.cost_type === "range" && job.cost_min != null && job.cost_max != null) {
       return `$${Math.round(job.cost_min).toLocaleString()}–$${Math.round(job.cost_max).toLocaleString()}`;
     }
-
-    // Fallbacks for any legacy fields (e.g., cost or cost_text)
     const anyJob = job as Record<string, any>;
-    if (typeof anyJob.cost === "number") {
-      return `$${Math.round(anyJob.cost).toLocaleString()}`;
-    }
-    if (typeof anyJob.cost_text === "string" && anyJob.cost_text.trim()) {
-      return anyJob.cost_text.trim();
-    }
-
+    if (typeof anyJob.cost === "number") return `$${Math.round(anyJob.cost).toLocaleString()}`;
+    if (typeof anyJob.cost_text === "string" && anyJob.cost_text.trim()) return anyJob.cost_text.trim();
     return "Cost not shared";
   }, [job]);
 
