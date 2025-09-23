@@ -70,26 +70,37 @@ function FeedInner() {
     ? (rawState as any)
     : "ALL";
   const initialRec = searchParams.get("rec") === "1";
+  const initialId = searchParams.get("id") ?? "";
 
   // filters
   const [q, setQ] = useState(initialQ);
   const [stateFilter, setStateFilter] = useState<(typeof STATES)[number]>(initialState);
   const [onlyRecommended, setOnlyRecommended] = useState(initialRec);
 
-  // keep local state in sync if URL changes (e.g., clicking suburb/business)
+  // selection and immersive overlay
+  const [selectedId, setSelectedId] = useState<string | null>(initialId || null);
+  const [overlayOpen, setOverlayOpen] = useState<boolean>(false);
+
+  // keep local state in sync if URL changes
   useEffect(() => {
     const nextQ = (searchParams.get("q") ?? "").trim();
     const nextStateRaw = (searchParams.get("state") ?? "ALL").toUpperCase();
     const nextState = (STATES as readonly string[]).includes(nextStateRaw) ? (nextStateRaw as any) : "ALL";
     const nextRec = searchParams.get("rec") === "1";
+    const nextId = searchParams.get("id");
 
     setQ(nextQ);
     setStateFilter(nextState);
     setOnlyRecommended(nextRec);
+    setSelectedId(nextId ?? null);
+
+    // auto-open overlay on desktop if ?id is present
+    if (nextId && isDesktop()) setOverlayOpen(true);
+    if (!nextId) setOverlayOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // state counts (respect q + recommended, independent of selected state)
+  // state counts (respect q + recommended)
   const [stateCounts, setStateCounts] = useState<Record<string, number>>({});
   const [allCount, setAllCount] = useState<number>(0);
 
@@ -100,18 +111,16 @@ function FeedInner() {
   const pageRef = useRef(0);
   const PAGE = 16;
 
-  // desktop selection
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
   // debounce search text
   const debouncedQ = useMemo(() => q.trim(), [q]);
 
-  // Sync URL with filters (so the select shows selected state, and sharing the page preserves filters)
+  // Sync URL with filters (and keep existing id if any)
   useEffect(() => {
     const params = new URLSearchParams();
     if (debouncedQ) params.set("q", debouncedQ);
     if (stateFilter !== "ALL") params.set("state", stateFilter);
     if (onlyRecommended) params.set("rec", "1");
+    if (selectedId) params.set("id", selectedId);
 
     const next = params.toString();
     const current = searchParams.toString();
@@ -119,7 +128,7 @@ function FeedInner() {
       router.replace(next ? `/feed?${next}` : "/feed", { scroll: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQ, stateFilter, onlyRecommended]);
+  }, [debouncedQ, stateFilter, onlyRecommended, selectedId]);
 
   // Load list when filters change
   useEffect(() => {
@@ -136,15 +145,15 @@ function FeedInner() {
   // Initial load
   useEffect(() => { void loadPage(true); }, []); // eslint-disable-line
 
-  // Keep selection valid
+  // Keep selection valid for right pane
   useEffect(() => {
-    if (items.length === 0) { setSelectedId(null); return; }
+    if (items.length === 0) { return; }
     if (!selectedId || !items.find(i => i.id === selectedId)) {
       setSelectedId(items[0].id);
     }
   }, [items, selectedId]);
 
-  // Load counts (reflect current q/recommended)
+  // counts (reflect current q/recommended)
   useEffect(() => {
     let ignore = false;
     async function loadCounts() {
@@ -167,6 +176,16 @@ function FeedInner() {
     loadCounts();
     return () => { ignore = true; };
   }, [debouncedQ, onlyRecommended]);
+
+  // Keyboard: Esc closes overlay
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && overlayOpen) closeOverlay();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlayOpen]);
 
   async function loadPage(reset = false) {
     if (loading) return;
@@ -199,22 +218,42 @@ function FeedInner() {
     setLoading(false);
   }
 
-  const selected = items.find(i => i.id === selectedId) || null;
+  function isDesktop() {
+    return typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 1024px)").matches; // Tailwind lg
+  }
 
-  const isDesktop = () =>
-    typeof window !== "undefined" &&
-    window.matchMedia("(min-width: 1024px)").matches; // Tailwind lg breakpoint
+  function openOverlay(id: string) {
+    setSelectedId(id);
+    if (isDesktop()) {
+      setOverlayOpen(true);
+    } else {
+      window.location.href = `/post/${id}`; // mobile: go to public page
+    }
+  }
+
+  function closeOverlay() {
+    setOverlayOpen(false);
+    // remove ?id from URL but keep filters
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("id");
+    router.replace(params.toString() ? `/feed?${params}` : "/feed", { scroll: false });
+  }
 
   function clearAll() {
     setQ("");
     setStateFilter("ALL");
     setOnlyRecommended(false);
+    setSelectedId(null);
+    setOverlayOpen(false);
     router.replace("/feed", { scroll: false });
     pageRef.current = 0;
     setItems([]);
     setCanLoadMore(true);
     void loadPage(true);
   }
+
+  const selected = items.find(i => i.id === selectedId) || null;
 
   return (
     <section className="grid gap-4 lg:grid-cols-12">
@@ -297,19 +336,15 @@ function FeedInner() {
           )}
 
           {items.map((j) => {
-            const link = `/post/${j.id}`;
             const selectedClasses =
-              selectedId === j.id && isDesktop()
+              selectedId === j.id
                 ? "bg-indigo-50/60 border-indigo-300 ring-1 ring-indigo-200"
                 : "bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300";
 
             return (
               <button
                 key={j.id}
-                onClick={() => {
-                  if (isDesktop()) setSelectedId(j.id);
-                  else window.location.href = link;
-                }}
+                onClick={() => openOverlay(j.id)}
                 aria-current={selectedId === j.id ? "true" : undefined}
                 className={[
                   "text-left rounded-xl border px-4 py-3 transition",
@@ -373,6 +408,44 @@ function FeedInner() {
           <JobDetailCard job={selected} />
         </div>
       </div>
+
+      {/* DESKTOP IMMERSIVE OVERLAY */}
+      {overlayOpen && (
+        <div
+          className="fixed inset-0 z-50"
+          aria-modal="true"
+          role="dialog"
+        >
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/20"
+            onClick={closeOverlay}
+          />
+          {/* Panel */}
+          <div className="absolute inset-0 md:inset-y-6 md:inset-x-6 lg:inset-y-10 lg:inset-x-10">
+            <div className="h-full w-full rounded-none md:rounded-2xl bg-white shadow-2xl border flex flex-col">
+              {/* Top bar */}
+              <div className="flex items-center justify-between px-3 py-2 border-b">
+                <button
+                  onClick={closeOverlay}
+                  className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 hover:bg-gray-100"
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 text-gray-700" aria-hidden>
+                    <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+                  </svg>
+                  <span className="text-sm">Back</span>
+                </button>
+                <div className="text-sm text-gray-500 pr-2">Detail</div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-auto p-3 md:p-6">
+                <JobDetailCard job={selected} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
