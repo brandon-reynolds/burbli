@@ -1,13 +1,15 @@
 // components/JobDetailCard.tsx
 "use client";
 
-import type { Job } from "@/types";
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import type { Job } from "@/types";
 
 export default function JobDetailCard({ job }: { job: Job | null }) {
+  // --- All hooks must be unconditionally called (top of component) ---
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -18,25 +20,21 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     return () => { ignore = true; };
   }, []);
 
-  if (!job) {
-    return (
-      <div className="rounded-2xl border bg-white p-6 text-gray-500">
-        Select a job to view details.
-      </div>
-    );
-  }
-
-  const [copied, setCopied] = useState(false);
-  const shareUrl =
-    typeof window !== "undefined" ? `${window.location.origin}/post/${job.id}` : "";
+  const shareUrl = useMemo(() => {
+    if (!job?.id) return "";
+    if (typeof window === "undefined") return "";
+    return `${window.location.origin}/post/${job.id}`;
+  }, [job?.id]);
 
   const costDisplay = useMemo(() => {
+    if (!job) return "";
     if (job.cost_type === "exact" && job.cost_exact != null) {
       return `$${Math.round(job.cost_exact).toLocaleString()}`;
     }
     if (job.cost_type === "range" && job.cost_min != null && job.cost_max != null) {
       return `$${Math.round(job.cost_min).toLocaleString()}–$${Math.round(job.cost_max).toLocaleString()}`;
     }
+    // fallbacks for any legacy records
     const anyJob = job as Record<string, any>;
     if (typeof anyJob.cost === "number") return `$${Math.round(anyJob.cost).toLocaleString()}`;
     if (typeof anyJob.cost_text === "string" && anyJob.cost_text.trim()) return anyJob.cost_text.trim();
@@ -44,6 +42,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
   }, [job]);
 
   async function copyLink() {
+    if (!shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
@@ -51,11 +50,13 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     } catch {}
   }
 
-  // Build query-link helpers so clicking updates the Feed search (&q=...)
-  function linkToFeedWithQ(q: string) {
-    const qs = new URLSearchParams();
-    qs.set("q", q);
-    return `/feed?${qs.toString()}`;
+  // --- Render ---
+  if (!job) {
+    return (
+      <div className="rounded-2xl border bg-white p-6 text-gray-500">
+        Select a job to view details.
+      </div>
+    );
   }
 
   return (
@@ -95,10 +96,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
       <section className="mt-6">
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Who did it</div>
         {job.business_name ? (
-          <Link
-            href={linkToFeedWithQ(job.business_name)}
-            className="mt-1 inline-block text-base underline"
-          >
+          <Link href={`/feed?q=${encodeURIComponent(job.business_name)}`} className="mt-1 inline-block text-base underline">
             {job.business_name}
           </Link>
         ) : (
@@ -110,7 +108,10 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Location</div>
         <div className="mt-1 text-base">
           {job.suburb ? (
-            <Link href={linkToFeedWithQ(`${job.suburb} ${job.state ?? ""}`.trim())} className="underline">
+            <Link
+              href={`/feed?q=${encodeURIComponent(`${job.suburb} ${job.state ?? ""}`.trim())}`}
+              className="underline"
+            >
               {job.suburb}
             </Link>
           ) : (
@@ -122,7 +123,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
 
       <section className="mt-6">
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cost</div>
-        {/* match other field sizing (no huge heading) */}
+        {/* Match other fields size */}
         <div className="mt-1 text-base font-semibold">{costDisplay}</div>
       </section>
 
