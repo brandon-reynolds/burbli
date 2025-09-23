@@ -4,7 +4,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function NavAuth() {
+type NavAuthProps = {
+  variant?: "inline" | "menu"; // accepted for backwards compatibility
+  currentPath?: string;        // accepted for backwards compatibility
+};
+
+export default function NavAuth(_props: NavAuthProps) {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -13,7 +18,6 @@ export default function NavAuth() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!ignore) setUserId(user?.id ?? null);
 
-      // keep in sync if auth state changes elsewhere
       const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
         if (!ignore) setUserId(session?.user?.id ?? null);
       });
@@ -32,7 +36,6 @@ export default function NavAuth() {
 
   async function signOut() {
     await supabase.auth.signOut();
-    // soft refresh current page
     if (typeof window !== "undefined") window.location.reload();
   }
 
@@ -41,10 +44,7 @@ export default function NavAuth() {
       <a href="/myposts" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
         My posts
       </a>
-      <button
-        onClick={signOut}
-        className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
-      >
+      <button onClick={signOut} className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
         Sign out
       </button>
     </>
