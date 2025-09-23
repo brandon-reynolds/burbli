@@ -22,6 +22,9 @@ export default function FeedPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("ALL");
   const [recOnly, setRecOnly] = useState(false);
 
+  // UI: open menu id for ⋯ on left cards
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+
   // Track if desktop (for auto-select)
   const isDesktopRef = useRef(false);
 
@@ -30,13 +33,6 @@ export default function FeedPage() {
     if (typeof window !== "undefined") {
       isDesktopRef.current = window.matchMedia("(min-width: 1024px)").matches;
 
-      // Read query params once on mount
-      const usp = new URLSearchParams(window.location.search);
-      const urlQ = usp.get("q") ?? "";
-      const urlId = usp.get("id") ?? "";
-      if (urlQ) setQ(urlQ);
-
-      // Load jobs then apply urlId selection if present
       (async () => {
         setLoading(true);
         const [{ data: auth }, { data, error }] = await Promise.all([
@@ -50,41 +46,23 @@ export default function FeedPage() {
         } else {
           const list = (data ?? []) as Job[];
           setJobs(list);
-          if (urlId) {
-            const found = list.find((j) => j.id === urlId) ?? null;
-            setSelected(found);
-          }
+          // Auto-select first on desktop
+          if (isDesktopRef.current && list.length > 0) setSelected(list[0]);
         }
         setLoading(false);
       })();
 
-      // Back/forward: update local state from URL (q & id)
-      const onPop = () => {
-        const p = new URLSearchParams(window.location.search);
-        setQ(p.get("q") ?? "");
-        const id = p.get("id");
-        setSelected(id ? (jobs.find((j) => j.id === id) ?? null) : null);
+      // Close any open menus on outside click
+      const onDocClick = (e: MouseEvent) => {
+        const target = e.target as HTMLElement | null;
+        if (!target) return;
+        // if click is outside a [data-menu-root] container, close menus
+        if (!target.closest("[data-menu-root]")) setMenuOpenId(null);
       };
-      window.addEventListener("popstate", onPop);
-      return () => window.removeEventListener("popstate", onPop);
+      document.addEventListener("click", onDocClick);
+      return () => document.removeEventListener("click", onDocClick);
     }
-  }, []); // run once
-
-  // Debounce URL sync when q/selected change
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if (typeof window === "undefined") return;
-      const p = new URLSearchParams(window.location.search);
-      if (q) p.set("q", q); else p.delete("q");
-      if (selected?.id) p.set("id", selected.id); else p.delete("id");
-      const next = `${window.location.pathname}${p.toString() ? `?${p}` : ""}`;
-      // Avoid pushing duplicate history entries
-      if (next !== window.location.pathname + window.location.search) {
-        window.history.replaceState(null, "", next);
-      }
-    }, 250);
-    return () => clearTimeout(t);
-  }, [q, selected?.id]);
+  }, []);
 
   // Derived: search/recommended
   const baseFiltered = useMemo(() => {
@@ -117,23 +95,11 @@ export default function FeedPage() {
     [baseFiltered, stateFilter]
   );
 
-  // Auto-select first on desktop (when none selected)
-  useEffect(() => {
-    if (!isDesktopRef.current) return;
-    if (selected) return;
-    if (!loading && filtered.length > 0) {
-      setSelected(filtered[0]);
-    }
-  }, [filtered, loading, selected]);
-
   function clearFilters() {
     setQ("");
     setStateFilter("ALL");
     setRecOnly(false);
-    setSelected(null);
-    if (typeof window !== "undefined") {
-      window.history.replaceState(null, "", "/feed");
-    }
+    setSelected(isDesktopRef.current && filtered.length > 0 ? filtered[0] : null);
   }
 
   const pill = (active: boolean) =>
@@ -150,6 +116,25 @@ export default function FeedPage() {
     if (typeof anyJob.cost === "number") return `$${Math.round(anyJob.cost).toLocaleString()}`;
     if (typeof anyJob.cost_text === "string" && anyJob.cost_text.trim()) return anyJob.cost_text.trim();
     return null;
+  }
+
+  async function handleDelete(jobId: string) {
+    if (!currentUserId) return;
+    const ok = confirm("Delete this post? This cannot be undone.");
+    if (!ok) return;
+    const { error } = await supabase.from("jobs").delete().eq("id", jobId).eq("owner_id", currentUserId);
+    if (error) {
+      alert("Could not delete. Please try again.");
+      return;
+    }
+    setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    if (selected?.id === jobId) setSelected(null);
+    setMenuOpenId(null);
+  }
+
+  function reportJob(j: Job) {
+    setMenuOpenId(null);
+    alert("Thanks for the report — we’ll review this post.");
   }
 
   return (
@@ -228,43 +213,100 @@ export default function FeedPage() {
                 ? "bg-green-50 text-green-700 ring-1 ring-green-200"
                 : "bg-red-50 text-red-700 ring-1 ring-red-200";
               const cost = costDisplay(j);
+              const isMine = currentUserId && j.owner_id === currentUserId;
 
               const CardContent = (
                 <div className="flex flex-col gap-2">
+                  {/* top row: time, rec chip, menu */}
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <span>{timeAgo(j.created_at ?? undefined)}</span>
-                    <div className="flex items-center gap-2">
+
+                    <div className="flex items-center gap-2" data-menu-root>
                       {j.recommend != null && (
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 ${chip}`}>
                           {j.recommend ? "Recommended" : "Not recommended"}
                         </span>
                       )}
-                      {currentUserId && j.owner_id === currentUserId && (
-                        <Link
-                          href="/myposts"
-                          onClick={(e) => e.stopPropagation()}
+
+                      {/* ⋯ menu */}
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenId((cur) => (cur === j.id ? null : j.id));
+                          }}
                           className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
-                          aria-label="Edit post"
-                          title="Edit post"
+                          aria-haspopup="menu"
+                          aria-expanded={menuOpenId === j.id}
+                          aria-label="More actions"
+                          title="More actions"
                         >
                           ⋯
-                        </Link>
-                      )}
+                        </button>
+
+                        {menuOpenId === j.id && (
+                          <div
+                            role="menu"
+                            className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg"
+                          >
+                            {isMine ? (
+                              <>
+                                <Link
+                                  href="/myposts"
+                                  role="menuitem"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpenId(null);
+                                  }}
+                                  className="block rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
+                                >
+                                  Edit
+                                </Link>
+                                <button
+                                  role="menuitem"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(j.id);
+                                  }}
+                                  className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                role="menuitem"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  reportJob(j);
+                                }}
+                                className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-gray-50"
+                              >
+                                Report
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
+                  {/* title */}
                   <h3 className="font-semibold text-base leading-snug line-clamp-2">
                     {j.title || "Untitled"}
                   </h3>
 
+                  {/* business */}
                   {j.business_name && (
                     <p className="text-sm text-gray-700 font-medium">{j.business_name}</p>
                   )}
 
+                  {/* location */}
                   <p className="text-sm text-gray-500">
                     {j.suburb}, {j.state} {j.postcode}
                   </p>
 
+                  {/* cost */}
                   {cost && <p className="text-sm text-gray-700">{cost}</p>}
                 </div>
               );
