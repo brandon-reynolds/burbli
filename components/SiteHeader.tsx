@@ -1,6 +1,7 @@
 // components/SiteHeader.tsx
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import NavAuth from "@/components/NavAuth";
@@ -12,6 +13,7 @@ export default function SiteHeader() {
   const isActive = (href: string) =>
     pathname === href ? "bg-gray-900 text-white" : "hover:bg-gray-100";
 
+  // close mobile sheet on back/forward
   useEffect(() => {
     const onPop = () => setOpen(false);
     window.addEventListener("popstate", onPop);
@@ -24,18 +26,24 @@ export default function SiteHeader() {
     <header className="border-b bg-white/90 backdrop-blur sticky top-0 z-10">
       <div className="mx-auto max-w-6xl flex items-center justify-between p-4 md:p-6">
         {/* Brand -> home */}
-        <a href="/" className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">BR</div>
+        <Link href="/" className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">
+            BR
+          </div>
           <div className="font-semibold text-lg">Burbli</div>
-        </a>
+        </Link>
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-2">
-          <a href="/" className={`px-3 py-2 rounded-xl text-sm ${isActive("/")}`}>Home</a>
-          <a href="/feed" className={`px-3 py-2 rounded-xl text-sm ${isActive("/feed")}`}>Browse jobs</a>
-          <a href="/submit" className={`px-3 py-2 rounded-xl text-sm ${isActive("/submit")} bg-gray-900 text-white`}>
+          <Link href="/" className={`px-3 py-2 rounded-xl text-sm ${isActive("/")}`}>
+            Home
+          </Link>
+          <Link href="/feed" className={`px-3 py-2 rounded-xl text-sm ${isActive("/feed")}`}>
+            Browse jobs
+          </Link>
+          <Link href="/submit" className={`px-3 py-2 rounded-xl text-sm ${isActive("/submit")}`}>
             Share project
-          </a>
+          </Link>
           <NavAuth />
         </nav>
 
@@ -61,9 +69,15 @@ export default function SiteHeader() {
       {open && (
         <div id="mobile-nav" className="md:hidden border-t bg-white">
           <div className="mx-auto max-w-6xl p-2">
-            <a href="/" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/")}`}>Home</a>
-            <a href="/feed" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/feed")}`}>Browse jobs</a>
-            <a href="/submit" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/submit")} bg-gray-900 text-white`}>Share project</a>
+            <Link href="/" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/")}`}>
+              Home
+            </Link>
+            <Link href="/feed" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/feed")}`}>
+              Browse jobs
+            </Link>
+            <Link href="/submit" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/submit")}`}>
+              Share project
+            </Link>
             <div className="mt-1 border-t pt-2">
               <NavAuth onAction={closeMenu} />
             </div>
