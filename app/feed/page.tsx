@@ -1,9 +1,8 @@
 // app/feed/page.tsx
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 import JobDetailCard from "@/components/JobDetailCard";
@@ -13,94 +12,81 @@ type AusState = (typeof STATES)[number];
 type StateFilter = "ALL" | AusState;
 
 export default function FeedPage() {
-  return (
-    <Suspense fallback={<div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>}>
-      <FeedInner />
-    </Suspense>
-  );
-}
-
-function FeedInner() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selected, setSelected] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const params = useSearchParams();
-  const router = useRouter();
-
-  // UI filters
+  // Filters
   const [q, setQ] = useState("");
   const [stateFilter, setStateFilter] = useState<StateFilter>("ALL");
   const [recOnly, setRecOnly] = useState(false);
 
-  // to avoid auto-select on mobile
-  const isDesktopRef = useRef<boolean>(false);
+  // Track if desktop (for auto-select)
+  const isDesktopRef = useRef(false);
+
+  // --- bootstrap (client-only safe) ---
   useEffect(() => {
     if (typeof window !== "undefined") {
       isDesktopRef.current = window.matchMedia("(min-width: 1024px)").matches;
-    }
-  }, []);
 
-  // signed-in user id (for edit shortcut)
-  useEffect(() => {
-    let ignore = false;
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!ignore) setCurrentUserId(user?.id ?? null);
-    })();
-    return () => { ignore = true; };
-  }, []);
+      // Read query params once on mount
+      const usp = new URLSearchParams(window.location.search);
+      const urlQ = usp.get("q") ?? "";
+      const urlId = usp.get("id") ?? "";
+      if (urlQ) setQ(urlQ);
 
-  // load jobs
-  useEffect(() => {
-    let ignore = false;
-    (async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("jobs")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (!ignore) {
-        if (error) console.error(error);
-        setJobs((data ?? []) as Job[]);
+      // Load jobs then apply urlId selection if present
+      (async () => {
+        setLoading(true);
+        const [{ data: auth }, { data, error }] = await Promise.all([
+          supabase.auth.getUser(),
+          supabase.from("jobs").select("*").order("created_at", { ascending: false }),
+        ]);
+        setCurrentUserId(auth?.user?.id ?? null);
+        if (error) {
+          console.error(error);
+          setJobs([]);
+        } else {
+          const list = (data ?? []) as Job[];
+          setJobs(list);
+          if (urlId) {
+            const found = list.find((j) => j.id === urlId) ?? null;
+            setSelected(found);
+          }
+        }
         setLoading(false);
-      }
-    })();
-    return () => { ignore = true; };
-  }, []);
+      })();
 
-  // Sync FROM URL → state (guarded to avoid loops)
-  const didInitRef = useRef(false);
-  useEffect(() => {
-    const urlQ = params.get("q") ?? "";
-    const urlId = params.get("id");
-
-    // initialize q from URL only once on mount, or when it actually differs
-    if (!didInitRef.current || urlQ !== q) {
-      didInitRef.current = true;
-      setQ(urlQ);
+      // Back/forward: update local state from URL (q & id)
+      const onPop = () => {
+        const p = new URLSearchParams(window.location.search);
+        setQ(p.get("q") ?? "");
+        const id = p.get("id");
+        setSelected(id ? (jobs.find((j) => j.id === id) ?? null) : null);
+      };
+      window.addEventListener("popstate", onPop);
+      return () => window.removeEventListener("popstate", onPop);
     }
+  }, []); // run once
 
-    if (urlId && jobs.length > 0) {
-      const found = jobs.find((j) => j.id === urlId) ?? null;
-      setSelected(found);
-    }
-  }, [params, jobs]); // q is intentionally omitted to prevent loops
-
-  // Debounce URL updates when user types (STATE → URL)
+  // Debounce URL sync when q/selected change
   useEffect(() => {
     const t = setTimeout(() => {
-      const base = "/feed";
-      const qs = new URLSearchParams();
-      if (q) qs.set("q", q);
-      if (selected?.id) qs.set("id", selected.id);
-      router.replace(`${base}${qs.toString() ? `?${qs.toString()}` : ""}`, { scroll: false });
-    }, 250); // debounce
+      if (typeof window === "undefined") return;
+      const p = new URLSearchParams(window.location.search);
+      if (q) p.set("q", q); else p.delete("q");
+      if (selected?.id) p.set("id", selected.id); else p.delete("id");
+      const next = `${window.location.pathname}${p.toString() ? `?${p}` : ""}`;
+      // Avoid pushing duplicate history entries
+      if (next !== window.location.pathname + window.location.search) {
+        window.history.replaceState(null, "", next);
+      }
+    }, 250);
     return () => clearTimeout(t);
-  }, [q, selected?.id, router]);
+  }, [q, selected?.id]);
 
-  // filter sets
+  // Derived: search/recommended
   const baseFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return jobs.filter((j) => {
@@ -113,6 +99,7 @@ function FeedInner() {
     });
   }, [jobs, q, recOnly]);
 
+  // Counts per state
   const counts = useMemo(() => {
     const map: Record<StateFilter, number> = {
       ALL: baseFiltered.length, VIC: 0, NSW: 0, QLD: 0, SA: 0, WA: 0, TAS: 0, ACT: 0, NT: 0,
@@ -124,18 +111,18 @@ function FeedInner() {
     return map;
   }, [baseFiltered]);
 
+  // Apply state filter
   const filtered = useMemo(
     () => baseFiltered.filter((j) => stateFilter === "ALL" || j.state === stateFilter),
     [baseFiltered, stateFilter]
   );
 
-  // auto-select first on desktop
+  // Auto-select first on desktop (when none selected)
   useEffect(() => {
     if (!isDesktopRef.current) return;
     if (selected) return;
     if (!loading && filtered.length > 0) {
       setSelected(filtered[0]);
-      // URL will be updated by the debounced effect above
     }
   }, [filtered, loading, selected]);
 
@@ -144,7 +131,9 @@ function FeedInner() {
     setStateFilter("ALL");
     setRecOnly(false);
     setSelected(null);
-    router.replace("/feed", { scroll: false });
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", "/feed");
+    }
   }
 
   const pill = (active: boolean) =>
@@ -224,9 +213,9 @@ function FeedInner() {
         </div>
       </div>
 
-      {/* Layout */}
+      {/* Two-pane */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Left: cards */}
+        {/* Left: list */}
         <div className="space-y-3 lg:col-span-5">
           {loading ? (
             <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
@@ -287,7 +276,7 @@ function FeedInner() {
                     isActive ? "border-blue-400 ring-2 ring-blue-100" : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
-                  {/* Desktop: select into right panel (URL id sync happens via debounced effect) */}
+                  {/* Desktop: select into right panel */}
                   <button
                     onClick={() => setSelected(j)}
                     className="hidden w-full text-left lg:block"
@@ -295,7 +284,7 @@ function FeedInner() {
                     {CardContent}
                   </button>
 
-                  {/* Mobile: open the public page */}
+                  {/* Mobile: open public page */}
                   <Link href={`/post/${j.id}`} className="block w-full lg:hidden">
                     {CardContent}
                   </Link>
