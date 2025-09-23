@@ -7,9 +7,10 @@ import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
 export default function JobDetailCard({ job }: { job: Job | null }) {
-  // --- All hooks must be unconditionally called (top of component) ---
+  // All hooks declared at top to keep order stable
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -20,9 +21,18 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     return () => { ignore = true; };
   }, []);
 
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (!el) return;
+      if (!el.closest("[data-detail-menu-root]")) setMenuOpen(false);
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+
   const shareUrl = useMemo(() => {
-    if (!job?.id) return "";
-    if (typeof window === "undefined") return "";
+    if (!job?.id || typeof window === "undefined") return "";
     return `${window.location.origin}/post/${job.id}`;
   }, [job?.id]);
 
@@ -34,7 +44,6 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     if (job.cost_type === "range" && job.cost_min != null && job.cost_max != null) {
       return `$${Math.round(job.cost_min).toLocaleString()}–$${Math.round(job.cost_max).toLocaleString()}`;
     }
-    // fallbacks for any legacy records
     const anyJob = job as Record<string, any>;
     if (typeof anyJob.cost === "number") return `$${Math.round(anyJob.cost).toLocaleString()}`;
     if (typeof anyJob.cost_text === "string" && anyJob.cost_text.trim()) return anyJob.cost_text.trim();
@@ -50,7 +59,24 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     } catch {}
   }
 
-  // --- Render ---
+  async function deleteHere() {
+    if (!job?.id || !currentUserId) return;
+    const ok = confirm("Delete this post? This cannot be undone.");
+    if (!ok) return;
+    const { error } = await supabase.from("jobs").delete().eq("id", job.id).eq("owner_id", currentUserId);
+    if (error) {
+      alert("Could not delete. Please try again.");
+      return;
+    }
+    // Simple redirect back to /feed so list refreshes
+    window.location.href = "/feed";
+  }
+
+  function reportHere() {
+    alert("Thanks for the report — we’ll review this post.");
+    setMenuOpen(false);
+  }
+
   if (!job) {
     return (
       <div className="rounded-2xl border bg-white p-6 text-gray-500">
@@ -59,11 +85,14 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     );
   }
 
+  const isMine = currentUserId && job.owner_id === currentUserId;
+
   return (
     <article className="rounded-2xl border bg-white p-5 md:p-6">
       <div className="flex items-start justify-between gap-4">
         <span className="text-xs text-gray-500">{timeAgo(job.created_at)}</span>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2" data-detail-menu-root>
           {job.recommend != null && (
             <span
               className={`inline-flex items-center rounded-full px-3 py-1 text-xs ${
@@ -75,17 +104,52 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
               {job.recommend ? "Recommended" : "Not recommended"}
             </span>
           )}
-          {/* Edit shortcut if I own this */}
-          {currentUserId && job.owner_id === currentUserId && (
-            <Link
-              href="/myposts"
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
+              }}
               className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
-              aria-label="Edit post"
-              title="Edit post"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="More actions"
+              title="More actions"
             >
               ⋯
-            </Link>
-          )}
+            </button>
+            {menuOpen && (
+              <div role="menu" className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg">
+                {isMine ? (
+                  <>
+                    <Link
+                      href="/myposts"
+                      role="menuitem"
+                      onClick={() => setMenuOpen(false)}
+                      className="block rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      Edit
+                    </Link>
+                    <button
+                      role="menuitem"
+                      onClick={deleteHere}
+                      className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    role="menuitem"
+                    onClick={reportHere}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-gray-50"
+                  >
+                    Report
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -123,7 +187,6 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
 
       <section className="mt-6">
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cost</div>
-        {/* Match other fields size */}
         <div className="mt-1 text-base font-semibold">{costDisplay}</div>
       </section>
 
