@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import JobDetailCard from "@/components/JobDetailCard";
-import type { Job } from "@/types"; // <-- use your project’s canonical Job type
+import type { Job } from "@/types";
 
 export default function PublicJobPage() {
   const params = useParams<{ id: string }>();
@@ -18,7 +18,6 @@ export default function PublicJobPage() {
       const id = params?.id;
       if (!id) return;
 
-      // Fetch all columns so it matches the Job type JobDetailCard expects
       const { data, error } = await supabase
         .from("jobs")
         .select("*")
@@ -26,9 +25,7 @@ export default function PublicJobPage() {
         .single();
 
       if (!ignore) {
-        if (!error && data) {
-          setJob(data as Job);
-        }
+        if (!error && data) setJob(data as Job);
         setLoading(false);
       }
     })();
@@ -41,16 +38,19 @@ export default function PublicJobPage() {
   if (loading) return null;
 
   return (
-    <div className="mx-auto max-w-4xl p-4 md:p-8">
+    <section className="mx-auto max-w-6xl px-4 md:px-8 py-8 md:py-12">
       <button
         onClick={() => router.back()}
-        className="mb-4 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+        className="mb-6 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
       >
         <span aria-hidden>‹</span> Back
       </button>
 
-      {/* Only the card — no duplicate page header */}
-      {job && <JobDetailCard job={job} />}
-    </div>
+      {job && (
+        <div className="max-w-3xl">
+          <JobDetailCard job={job} />
+        </div>
+      )}
+    </section>
   );
 }
