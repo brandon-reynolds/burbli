@@ -60,10 +60,10 @@ export default function FeedPage() {
   const pageRef = useRef(0);
   const PAGE = 16;
 
-  // selection (for detail pane)
+  // desktop selection (hidden on mobile)
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // debounce q a touch
+  // debounce q
   const debouncedQ = useMemo(() => q.trim(), [q]);
   useEffect(() => {
     const t = setTimeout(() => {
@@ -78,7 +78,7 @@ export default function FeedPage() {
 
   useEffect(() => { void loadPage(true); }, []); // eslint-disable-line
 
-  // keep selected in sync with current list
+  // keep selection valid on desktop
   useEffect(() => {
     if (items.length === 0) { setSelectedId(null); return; }
     if (!selectedId || !items.find(i => i.id === selectedId)) {
@@ -120,12 +120,17 @@ export default function FeedPage() {
 
   const selected = items.find(i => i.id === selectedId) || null;
 
+  // simple helper to decide mobile vs desktop at click time
+  const isDesktop = () =>
+    typeof window !== "undefined" &&
+    window.matchMedia("(min-width: 1024px)").matches; // Tailwind lg breakpoint
+
   return (
-    <section className="grid gap-4 md:grid-cols-12">
-      {/* LEFT: filters + list */}
-      <div className="md:col-span-5 md:pr-2">
-        {/* Filters (search → states → recommended) */}
-        <div className="rounded-2xl border bg-white p-3 md:p-4 sticky top-[72px] z-10">
+    <section className="grid gap-4 lg:grid-cols-12">
+      {/* LEFT: filters + list (full width on mobile) */}
+      <div className="lg:col-span-5 lg:pr-2">
+        {/* Filters (NO sticky) */}
+        <div className="rounded-2xl border bg-white p-3 md:p-4">
           {/* Search */}
           <div className="relative">
             <input
@@ -173,58 +178,64 @@ export default function FeedPage() {
               <li className="px-4 py-6 text-sm text-gray-600">No results</li>
             )}
 
-            {items.map((j) => (
-              <li key={j.id}>
-                <button
-                  onClick={() => setSelectedId(j.id)}
-                  aria-current={selectedId === j.id ? "true" : undefined}
-                  className={[
-                    "w-full text-left px-4 py-3 transition",
-                    selectedId === j.id
-                      ? "bg-gray-50 ring-inset ring-2 ring-gray-900"
-                      : "hover:bg-gray-50",
-                  ].join(" ")}
-                >
-                  {/* Row 1: dot + title + age + rec badge (compact) */}
-                  <div className="flex items-start gap-2">
-                    <span
-                      className={[
-                        "mt-1 inline-block h-2 w-2 rounded-full",
-                        j.recommend ? "bg-green-600" : "bg-red-600",
-                      ].join(" ")}
-                      aria-hidden
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-start gap-3">
-                        <h3 className="font-medium leading-tight line-clamp-1">
-                          {j.title || "Untitled job"}
-                        </h3>
-                        <span className="ml-auto shrink-0 text-xs text-gray-400">
-                          {since(j.created_at)}
-                        </span>
-                      </div>
+            {items.map((j) => {
+              const link = `/post/${j.id}`;
+              return (
+                <li key={j.id}>
+                  <button
+                    onClick={() => {
+                      if (isDesktop()) setSelectedId(j.id);
+                      else window.location.href = link; // mobile: navigate to details page
+                    }}
+                    aria-current={selectedId === j.id ? "true" : undefined}
+                    className={[
+                      "w-full text-left px-4 py-3 transition",
+                      selectedId === j.id && isDesktop()
+                        ? "bg-gray-50 ring-inset ring-2 ring-gray-900"
+                        : "hover:bg-gray-50",
+                    ].join(" ")}
+                  >
+                    {/* Row 1: dot + title + age + rec badge */}
+                    <div className="flex items-start gap-2">
+                      <span
+                        className={[
+                          "mt-1 inline-block h-2 w-2 rounded-full",
+                          j.recommend ? "bg-green-600" : "bg-red-600",
+                        ].join(" ")}
+                        aria-hidden
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-start gap-3">
+                          <h3 className="font-medium leading-tight line-clamp-1">
+                            {j.title || "Untitled job"}
+                          </h3>
+                          <span className="ml-auto shrink-0 text-xs text-gray-400">
+                            {since(j.created_at)}
+                          </span>
+                        </div>
 
-                      {/* Row 2: compact meta */}
-                      <div className="mt-1 text-[13px] text-gray-600 flex flex-wrap items-center gap-x-3 gap-y-1">
-                        {j.business_name && <span className="truncate">{j.business_name}</span>}
-                        <span className="truncate">{j.suburb}, {j.state} {j.postcode}</span>
-                        <span className="truncate">{costLabel(j)}</span>
-                        <span
-                          className={[
-                            "ml-auto rounded-full px-2 py-0.5 text-[11px] border",
-                            j.recommend
-                              ? "bg-green-50 text-green-800 border-green-200"
-                              : "bg-red-50 text-red-800 border-red-200",
-                          ].join(" ")}
-                        >
-                          {j.recommend ? "Recommended" : "Not recommended"}
-                        </span>
+                        {/* Row 2: compact meta */}
+                        <div className="mt-1 text-[13px] text-gray-600 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          {j.business_name && <span className="truncate">{j.business_name}</span>}
+                          <span className="truncate">{j.suburb}, {j.state} {j.postcode}</span>
+                          <span className="truncate">{costLabel(j)}</span>
+                          <span
+                            className={[
+                              "ml-auto rounded-full px-2 py-0.5 text-[11px] border",
+                              j.recommend
+                                ? "bg-green-50 text-green-800 border-green-200"
+                                : "bg-red-50 text-red-800 border-red-200",
+                            ].join(" ")}
+                          >
+                            {j.recommend ? "Recommended" : "Not recommended"}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
-              </li>
-            ))}
+                  </button>
+                </li>
+              );
+            })}
 
             {/* Loading skeletons */}
             {loading && (
@@ -253,8 +264,8 @@ export default function FeedPage() {
         )}
       </div>
 
-      {/* RIGHT: detail pane */}
-      <div className="md:col-span-7">
+      {/* RIGHT: detail pane (hidden on mobile) */}
+      <div className="hidden lg:block lg:col-span-7">
         <DetailPane job={selected} />
       </div>
     </section>
