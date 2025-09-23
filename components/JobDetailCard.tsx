@@ -1,4 +1,3 @@
-// components/JobDetailCard.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -7,7 +6,6 @@ import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
 export default function JobDetailCard({ job }: { job: Job | null }) {
-  // All hooks declared at top to keep order stable
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -37,16 +35,19 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
   }, [job?.id]);
 
   const costDisplay = useMemo(() => {
-    if (!job) return "";
-    if (job.cost_type === "exact" && job.cost_exact != null) {
-      return `$${Math.round(job.cost_exact).toLocaleString()}`;
-    }
-    if (job.cost_type === "range" && job.cost_min != null && job.cost_max != null) {
-      return `$${Math.round(job.cost_min).toLocaleString()}–$${Math.round(job.cost_max).toLocaleString()}`;
-    }
-    const anyJob = job as Record<string, any>;
-    if (typeof anyJob.cost === "number") return `$${Math.round(anyJob.cost).toLocaleString()}`;
-    if (typeof anyJob.cost_text === "string" && anyJob.cost_text.trim()) return anyJob.cost_text.trim();
+    if (!job) return "Cost not shared";
+    if (job.cost_type === "exact" && job.cost_exact != null)
+      return `$${Math.round(Number(job.cost_exact)).toLocaleString()}`;
+    if (job.cost_type === "range" && job.cost_min != null && job.cost_max != null)
+      return `$${Math.round(Number(job.cost_min)).toLocaleString()}–$${Math.round(
+        Number(job.cost_max)
+      ).toLocaleString()}`;
+    const any = job as Record<string, any>;
+    const legacy = any.cost;
+    if (typeof legacy === "number") return `$${Math.round(legacy).toLocaleString()}`;
+    if (typeof legacy === "string" && legacy.trim() && !Number.isNaN(Number(legacy)))
+      return `$${Math.round(Number(legacy)).toLocaleString()}`;
+    if (typeof any.cost_text === "string" && any.cost_text.trim()) return any.cost_text.trim();
     return "Cost not shared";
   }, [job]);
 
@@ -61,14 +62,12 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
 
   async function deleteHere() {
     if (!job?.id || !currentUserId) return;
-    const ok = confirm("Delete this post? This cannot be undone.");
-    if (!ok) return;
+    if (!confirm("Delete this post? This cannot be undone.")) return;
     const { error } = await supabase.from("jobs").delete().eq("id", job.id).eq("owner_id", currentUserId);
     if (error) {
       alert("Could not delete. Please try again.");
       return;
     }
-    // Simple redirect back to /feed so list refreshes
     window.location.href = "/feed";
   }
 
@@ -78,11 +77,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
   }
 
   if (!job) {
-    return (
-      <div className="rounded-2xl border bg-white p-6 text-gray-500">
-        Select a job to view details.
-      </div>
-    );
+    return <div className="rounded-2xl border bg-white p-6 text-gray-500">Select a job to view details.</div>;
   }
 
   const isMine = currentUserId && job.owner_id === currentUserId;
@@ -106,10 +101,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
           )}
           <div className="relative">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen((v) => !v);
-              }}
+              onClick={() => setMenuOpen((v) => !v)}
               className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
@@ -123,7 +115,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
                 {isMine ? (
                   <>
                     <Link
-                      href="/myposts"
+                      href={`/edit/${job.id}`}
                       role="menuitem"
                       onClick={() => setMenuOpen(false)}
                       className="block rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
