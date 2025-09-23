@@ -1,191 +1,165 @@
-// components/JobDetailCard.tsx
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 
 type Job = {
   id: string;
-  title: string;
-  business_name: string | null;
-  suburb: string;
-  state: "VIC"|"NSW"|"QLD"|"SA"|"WA"|"TAS"|"ACT"|"NT";
-  postcode: string;
-  recommend: boolean;
-  cost_type: "exact" | "range" | "hidden";
-  cost_amount?: number | null;
+  title?: string | null;
+  business_name?: string | null;
+  suburb?: string | null;
+  state?: string | null;          // e.g. "VIC"
+  postcode?: string | null;       // e.g. "3076"
+  recommend?: boolean | null;     // true / false
+  cost_type?: "exact" | "range" | "na" | null;
   cost_min?: number | null;
   cost_max?: number | null;
   notes?: string | null;
-  created_at: string;
+  created_at?: string | null;
 };
 
-type Variant = "default" | "public";
-
-const fmtAUD = (cents?: number | null) =>
-  typeof cents === "number"
-    ? new Intl.NumberFormat("en-AU", {
-        style: "currency",
-        currency: "AUD",
-        maximumFractionDigits: 0,
-      }).format(Math.round(cents / 100))
-    : null;
-
-function costLabel(j: Job) {
-  if (j.cost_type === "exact" && j.cost_amount) return fmtAUD(j.cost_amount);
-  if (j.cost_type === "range" && j.cost_min && j.cost_max)
-    return `${fmtAUD(j.cost_min)} – ${fmtAUD(j.cost_max)}`;
-  return "Cost not shared";
-}
-
-function since(iso: string) {
-  const ms = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(ms / 60000);
+function formatRelative(ts?: string | null) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const mins = Math.max(1, Math.round((Date.now() - d.getTime()) / 60000));
   if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
+  const hrs = Math.round(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
+  const days = Math.round(hrs / 24);
+  return `${days}d ago`;
 }
 
-export default function JobDetailCard({
-  job,
-  variant = "default",
-}: {
-  job: Job | null;
-  variant?: Variant;
-}) {
+function currency(n?: number | null) {
+  if (n == null) return "";
+  return n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
+}
+
+export default function JobDetailCard({ job }: { job: Job }) {
   const [copied, setCopied] = useState(false);
 
-  if (!job) {
-    return (
-      <div className="rounded-2xl border bg-white p-6 text-sm text-gray-600">
-        Select a job from the list to see details.
-      </div>
-    );
-  }
+  const costDisplay = useMemo(() => {
+    if (job.cost_type === "exact" && job.cost_min != null) {
+      return currency(job.cost_min);
+    }
+    if (job.cost_type === "range" && job.cost_min != null && job.cost_max != null) {
+      return `${currency(job.cost_min)} – ${currency(job.cost_max)}`;
+    }
+    return "Cost not shared";
+  }, [job.cost_min, job.cost_max, job.cost_type]);
 
-  const shareUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/post/${job.id}`
-      : `/post/${job.id}`;
+  const shareUrl = useMemo(() => {
+    if (!job.id) return "";
+    // Will work on both right-panel and public page
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/post/${job.id}`;
+    }
+    return `/post/${job.id}`;
+  }, [job.id]);
 
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* ignore */
-    }
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
   }
-
-  const chip = job.recommend
-    ? "bg-green-50 text-green-800 border-green-200"
-    : "bg-red-50 text-red-800 border-red-200";
 
   return (
     <article className="rounded-2xl border bg-white p-5 md:p-6">
-      {/* summary row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-xs text-gray-500">{since(job.created_at)}</div>
-        <span className={`rounded-full px-2 py-0.5 text-xs border ${chip}`}>
-          {job.recommend ? "Recommended" : "Not recommended"}
-        </span>
+      <div className="flex items-start justify-between gap-4">
+        <span className="text-xs text-gray-500">{formatRelative(job.created_at)}</span>
+        {job.recommend != null && (
+          <span
+            className={`inline-flex items-center rounded-full px-3 py-1 text-xs ${
+              job.recommend
+                ? "bg-green-50 text-green-700 ring-1 ring-green-200"
+                : "bg-red-50 text-red-700 ring-1 ring-red-200"
+            }`}
+          >
+            {job.recommend ? "Recommended" : "Not recommended"}
+          </span>
+        )}
       </div>
 
-      {/* FIELD: Title */}
-      <section className="mt-2">
-        <div className="text-[11px] uppercase tracking-wide text-gray-500">Title</div>
-        <h2 className="mt-1 text-2xl font-semibold leading-snug">
-          {job.title || "Untitled job"}
-        </h2>
+      <h2 className="mt-3 text-2xl font-semibold tracking-tight text-gray-900">
+        {job.title || "Untitled job"}
+      </h2>
+
+      {/* Who */}
+      <section className="mt-6">
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Who did it</div>
+        {job.business_name ? (
+          <Link
+            href={`/feed?q=${encodeURIComponent(job.business_name)}`}
+            className="mt-1 inline-block text-base underline"
+          >
+            {job.business_name}
+          </Link>
+        ) : (
+          <div className="mt-1 text-base text-gray-600">Not specified</div>
+        )}
       </section>
 
-      {/* FIELD: Who did it (clickable to search) */}
+      {/* Location */}
       <section className="mt-6">
-        <div className="text-[11px] uppercase tracking-wide text-gray-500">Who did it</div>
-        <div className="mt-1 text-[15px] text-gray-900">
-          {job.business_name ? (
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Location</div>
+        <div className="mt-1 text-base">
+          {job.suburb ? (
             <Link
-              href={`/feed?q=${encodeURIComponent(job.business_name)}`}
-              className="underline hover:no-underline"
+              href={`/feed?suburb=${encodeURIComponent(job.suburb)}${
+                job.state ? `&state=${encodeURIComponent(job.state)}` : ""
+              }`}
+              className="underline"
             >
-              {job.business_name}
+              {job.suburb}
             </Link>
           ) : (
-            "Not specified"
+            "—"
           )}
+          {job.state ? `, ${job.state}` : ""} {job.postcode ? job.postcode : ""}
         </div>
       </section>
 
-      {/* FIELD: Location */}
+      {/* Cost */}
       <section className="mt-6">
-        <div className="text-[11px] uppercase tracking-wide text-gray-500">Location</div>
-        <div className="mt-1 text-[15px] text-gray-900">
-          <Link
-            href={`/feed?q=${encodeURIComponent(job.suburb)}`}
-            className="underline hover:no-underline"
-          >
-            {job.suburb}
-          </Link>
-          {", "}{job.state} {job.postcode}
-        </div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cost</div>
+        <div className="mt-1 text-2xl font-semibold">{costDisplay}</div>
       </section>
 
-      {/* FIELD: Cost */}
-      <section className="mt-6">
-        <div className="text-[11px] uppercase tracking-wide text-gray-500">Cost</div>
-        <div className="mt-1 text-xl font-semibold">{costLabel(job)}</div>
-      </section>
-
-      {/* FIELD: Details */}
-      <section className="mt-6">
-        <div className="text-[11px] uppercase tracking-wide text-gray-500">Details</div>
-        <div className="mt-2 text-[15px] leading-6 text-gray-900 whitespace-pre-wrap">
-          {job.notes?.trim() || "—"}
-        </div>
-      </section>
-
-      {/* CTAs */}
-      {variant === "default" ? (
-        <section className="mt-8 flex flex-wrap gap-2">
-          <a
-            href="/submit"
-            className="px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-gray-800"
-          >
-            Share your project
-          </a>
-          <button
-            onClick={copyLink}
-            className="px-4 py-2 rounded-xl border hover:bg-gray-50"
-          >
-            {copied ? "Copied!" : "Copy link"}
-          </button>
-        </section>
-      ) : (
-        <section className="mt-8 border-t pt-4">
-          <p className="text-[13px] text-gray-600">
-            Had something similar done in {job.suburb}? Share it to help neighbours know what to expect.
+      {/* Details */}
+      {job.notes && (
+        <section className="mt-6">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Details</div>
+          <p className="mt-2 whitespace-pre-wrap text-base leading-relaxed text-gray-800">
+            {job.notes}
           </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <a
-              href="/submit"
-              className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-800"
-            >
-              Share your project
-            </a>
-            <button
-              onClick={copyLink}
-              className="px-3 py-1.5 rounded-lg border text-sm hover:bg-gray-50"
-            >
-              {copied ? "Copied!" : "Copy link"}
-            </button>
-          </div>
         </section>
       )}
+
+      {/* Divider + prompt + buttons */}
+      <div className="mt-8 border-t pt-5">
+        <p className="text-sm text-gray-600">
+          {job.suburb
+            ? `Had something similar done in ${job.suburb}? Share it to help neighbours know what to expect.`
+            : "Had something similar done? Share it to help neighbours know what to expect."}
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Link
+            href="/submit"
+            className="inline-flex items-center rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-black"
+          >
+            Share your project
+          </Link>
+
+          <button
+            onClick={copyLink}
+            className="inline-flex items-center rounded-xl border px-4 py-2 text-sm hover:bg-gray-50"
+          >
+            {copied ? "Copied" : "Copy link"}
+          </button>
+        </div>
+      </div>
     </article>
   );
 }
