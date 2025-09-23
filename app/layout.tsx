@@ -10,13 +10,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Header: tighter on mobile, no tagline, nicer logo, client-driven nav */}
         <header className="sticky top-0 z-50 border-b bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
           <div className="mx-auto max-w-6xl flex items-center justify-between px-3 py-3 md:px-6 md:py-4">
-            {/* Brand */}
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className="h-9 w-9 md:h-10 md:w-10 rounded-xl bg-gradient-to-br from-indigo-600 to-fuchsia-600 shadow-sm grid place-items-center">
+            {/* Brand (now clickable link to Home) */}
+            <Link
+              href="/"
+              aria-label="Go to Home"
+              className="flex items-center gap-2 md:gap-3 group"
+            >
+              <div className="h-9 w-9 md:h-10 md:w-10 rounded-xl bg-gradient-to-br from-indigo-600 to-fuchsia-600 shadow-sm grid place-items-center transition-transform group-hover:scale-105">
                 <span className="text-white font-bold text-base md:text-lg leading-none">B</span>
               </div>
-              <span className="font-semibold text-base md:text-lg tracking-tight">Burbli</span>
-            </div>
+              <span className="font-semibold text-base md:text-lg tracking-tight">
+                Burbli
+              </span>
+            </Link>
 
             {/* Navigation (desktop + mobile) */}
             <SiteNav />
