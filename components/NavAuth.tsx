@@ -4,12 +4,13 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-type NavAuthProps = {
-  variant?: "inline" | "menu"; // accepted for backwards compatibility
-  currentPath?: string;        // accepted for backwards compatibility
+export type NavAuthProps = {
+  variant?: "inline" | "menu";     // backward-compat only
+  currentPath?: string;            // backward-compat only
+  onAction?: () => void;           // call to close mobile menu, etc.
 };
 
-export default function NavAuth(_props: NavAuthProps) {
+export default function NavAuth({ onAction }: NavAuthProps) {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,9 +27,18 @@ export default function NavAuth(_props: NavAuthProps) {
     return () => { ignore = true; };
   }, []);
 
+  function handleAfterClick() {
+    // helpful for closing a mobile sheet if parent passed onAction
+    try { onAction?.(); } catch {}
+  }
+
   if (!userId) {
     return (
-      <a href="/signin" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
+      <a
+        href="/signin"
+        onClick={handleAfterClick}
+        className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
+      >
         Sign in
       </a>
     );
@@ -36,15 +46,23 @@ export default function NavAuth(_props: NavAuthProps) {
 
   async function signOut() {
     await supabase.auth.signOut();
+    handleAfterClick();
     if (typeof window !== "undefined") window.location.reload();
   }
 
   return (
     <>
-      <a href="/myposts" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
+      <a
+        href="/myposts"
+        onClick={handleAfterClick}
+        className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
+      >
         My posts
       </a>
-      <button onClick={signOut} className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">
+      <button
+        onClick={signOut}
+        className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100"
+      >
         Sign out
       </button>
     </>
