@@ -1,107 +1,71 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+// app/post/[id]/page.tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import type { Job } from "@/types";
+import JobDetailCard from "@/components/JobDetailCard";
 
-function fmtAud(c?: number | null) {
-  return c == null
-    ? ""
-    : new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(
-        c / 100
-      );
-}
+type Job = {
+  id: string;
+  title: string;
+  business_name: string | null;
+  suburb: string;
+  state: "VIC"|"NSW"|"QLD"|"SA"|"WA"|"TAS"|"ACT"|"NT";
+  postcode: string;
+  recommend: boolean;
+  cost_type: "exact" | "range" | "hidden";
+  cost_amount?: number | null;
+  cost_min?: number | null;
+  cost_max?: number | null;
+  notes?: string | null;
+  created_at: string;
+};
 
-async function getJob(id: string): Promise<Job | null> {
-  const { data, error } = await supabase
-    .from("jobs")
-    .select("*")
-    .eq("id", id)
-    .eq("is_approved", true)
-    .maybeSingle();
-  if (error) return null;
-  return (data as Job) ?? null;
-}
+export default function PublicPostPage() {
+  const params = useParams<{ id: string }>();
+  const id = (params?.id as string) || "";
+  const [job, setJob] = useState<Job | null>(null);
+  const [loading, setLoading] = useState(true);
 
-export async function generateMetadata(
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Metadata> {
-  const { id } = await params;
-  const job = await getJob(id);
-  if (!job) return { title: "Post not found • Burbli" };
+  useEffect(() => {
+    let ignore = false;
+    async function load() {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("id,title,business_name,suburb,state,postcode,recommend,cost_type,cost_amount,cost_min,cost_max,notes,created_at")
+        .eq("id", id)
+        .maybeSingle();
 
-  const title = `${job.title} — ${job.suburb}, ${job.state} ${job.postcode}`;
-  const description = [
-    job.business_name ? `Done by ${job.business_name}` : "",
-    job.recommend ? "Recommended" : "Not recommended",
-    job.cost_type === "exact"
-      ? `Cost ${fmtAud(job.cost_amount)}`
-      : job.cost_type === "range"
-      ? `Cost ${fmtAud(job.cost_min)}–${fmtAud(job.cost_max)}`
-      : "Cost hidden",
-  ]
-    .filter(Boolean)
-    .join(" • ");
+      if (!ignore) {
+        if (!error && data) setJob(data as Job);
+        setLoading(false);
+      }
+    }
+    if (id) load();
+    return () => { ignore = true; };
+  }, [id]);
 
-  const url = `https://burbli.vercel.app/post/${job.id}`;
-
-  return {
-    title,
-    description,
-    openGraph: { title, description, url, siteName: "Burbli", type: "article" },
-    twitter: { card: "summary_large_image", title, description },
-  };
-}
-
-export default async function PostPage(
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  const job = await getJob(id);
-  if (!job) notFound();
-
-  return (
-    <article className="mx-auto max-w-2xl rounded-2xl border bg-white p-6">
-      <header className="flex items-start justify-between gap-3">
-        <h1 className="text-xl font-semibold">{job.title}</h1>
-        <span
-          className={`text-xs px-2 py-1 rounded ${
-            job.recommend ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
-          }`}
-        >
-          {job.recommend ? "Recommended" : "Not recommended"}
-        </span>
-      </header>
-
-      <div className="mt-2 text-sm text-gray-600">
-        {job.suburb}, {job.state} {job.postcode}
+  if (loading) {
+    return (
+      <div className="rounded-2xl border bg-white p-6">
+        <div className="h-5 w-40 bg-gray-200 rounded animate-pulse" />
+        <div className="mt-4 h-7 w-2/3 bg-gray-200 rounded animate-pulse" />
+        <div className="mt-6 h-4 w-1/2 bg-gray-200 rounded animate-pulse" />
+        <div className="mt-3 h-4 w-2/3 bg-gray-200 rounded animate-pulse" />
       </div>
-      <div className="mt-1 text-sm">
-        Done by <span className="font-medium">{job.business_name}</span>
-      </div>
-      {job.cost_type !== "hidden" && (
-        <div className="mt-1 text-sm">
-          Cost:{" "}
-          <span className="font-medium">
-            {job.cost_type === "exact"
-              ? fmtAud(job.cost_amount)
-              : `${fmtAud(job.cost_min)}–${fmtAud(job.cost_max)}`}
-          </span>
-        </div>
-      )}
-      {job.notes && <p className="mt-3 text-sm text-gray-700">{job.notes}</p>}
+    );
+  }
 
-      <footer className="mt-6 flex items-center justify-between text-xs text-gray-500">
-        <time dateTime={job.created_at}>
-          Posted {new Date(job.created_at).toLocaleDateString()}
-        </time>
-        <a
-          className="underline"
-          href={`/post/${job.id}`}
-          target="_blank"
-        >
-          Open link
-        </a>
-      </footer>
-    </article>
-  );
+  if (!job) {
+    return (
+      <div className="rounded-2xl border bg-white p-6">
+        <div className="text-sm text-gray-700">This job could not be found.</div>
+        <a href="/feed" className="mt-3 inline-block text-sm underline">Back to browse</a>
+      </div>
+    );
+  }
+
+  return <JobDetailCard job={job} />;
 }
