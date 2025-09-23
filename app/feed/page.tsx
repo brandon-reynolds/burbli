@@ -28,22 +28,17 @@ function FeedInner() {
   const params = useSearchParams();
   const router = useRouter();
 
-  // UI filters
   const [q, setQ] = useState("");
   const [stateFilter, setStateFilter] = useState<StateFilter>("ALL");
   const [recOnly, setRecOnly] = useState(false);
 
-  // track media query for desktop
   const isDesktopRef = useRef<boolean>(false);
-
   useEffect(() => {
-    // set once on mount; we only need a hint to avoid auto-selecting on mobile
     if (typeof window !== "undefined") {
       isDesktopRef.current = window.matchMedia("(min-width: 1024px)").matches;
     }
   }, []);
 
-  // Load all jobs
   useEffect(() => {
     let ignore = false;
     (async () => {
@@ -63,7 +58,6 @@ function FeedInner() {
     };
   }, []);
 
-  // Base filtered by search + recommended (used for state counters)
   const baseFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return jobs.filter((j) => {
@@ -81,7 +75,6 @@ function FeedInner() {
     });
   }, [jobs, q, recOnly]);
 
-  // Counts per state from the baseFiltered set
   const counts = useMemo(() => {
     const map: Record<StateFilter, number> = {
       ALL: baseFiltered.length,
@@ -101,30 +94,25 @@ function FeedInner() {
     return map;
   }, [baseFiltered]);
 
-  // Final filtered list includes state filter
   const filtered = useMemo(() => {
     return baseFiltered.filter((j) => stateFilter === "ALL" || j.state === stateFilter);
   }, [baseFiltered, stateFilter]);
 
-  // Restore selection from ?id= if present
   useEffect(() => {
     const id = params.get("id");
     if (!id || jobs.length === 0) return;
     setSelected(jobs.find((j) => j.id === id) ?? null);
   }, [params, jobs]);
 
-  // Auto-select first card on desktop (when none selected)
   useEffect(() => {
-    if (!isDesktopRef.current) return; // don't auto-select on mobile
+    if (!isDesktopRef.current) return;
     if (selected) return;
     if (!loading && filtered.length > 0) {
       setSelected(filtered[0]);
       router.push(`/feed?id=${filtered[0].id}`, { scroll: false });
     }
-    // we intentionally depend on filtered and loading
   }, [filtered, loading, selected, router]);
 
-  // Clear all filters & selection
   function clearFilters() {
     setQ("");
     setStateFilter("ALL");
@@ -133,7 +121,6 @@ function FeedInner() {
     router.push("/feed", { scroll: false });
   }
 
-  // Styles
   const pill = (active: boolean) =>
     `whitespace-nowrap rounded-xl border px-3 py-1.5 text-sm ${
       active ? "bg-gray-900 text-white border-gray-900" : "bg-white hover:bg-gray-50"
@@ -141,10 +128,9 @@ function FeedInner() {
 
   return (
     <section className="space-y-4">
-      {/* Filters card */}
+      {/* Filters */}
       <div className="rounded-2xl border bg-white p-3 md:p-4">
         <div className="flex flex-col gap-3">
-          {/* Row 1: search + recommended + clear */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
             <div className="relative flex-1">
               <input
@@ -153,7 +139,7 @@ function FeedInner() {
                 placeholder="Search by title, business, suburb or postcode"
                 className="w-full rounded-xl border pl-9 pr-9 py-2"
               />
-              <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" viewBox="0 0 24 24" aria-hidden>
+              <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" viewBox="0 0 24 24">
                 <path
                   d="M21 21l-4.3-4.3m1.1-5.1a6.8 6.8 0 11-13.6 0 6.8 6.8 0 0113.6 0z"
                   stroke="currentColor"
@@ -167,7 +153,6 @@ function FeedInner() {
                   type="button"
                   onClick={() => setQ("")}
                   className="absolute right-2 top-1.5 h-7 w-7 grid place-items-center rounded-lg hover:bg-gray-100"
-                  aria-label="Clear search"
                 >
                   <svg viewBox="0 0 24 24" className="h-4 w-4 text-gray-500">
                     <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -178,7 +163,6 @@ function FeedInner() {
 
             <label className="inline-flex items-center gap-2 text-sm text-gray-700">
               <input
-                id="recOnly"
                 type="checkbox"
                 checked={recOnly}
                 onChange={(e) => setRecOnly(e.target.checked)}
@@ -198,20 +182,12 @@ function FeedInner() {
             )}
           </div>
 
-          {/* Row 2: state pills with counts (horizontal scroll on mobile) */}
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            <button
-              onClick={() => setStateFilter("ALL")}
-              className={pill(stateFilter === "ALL")}
-            >
+            <button onClick={() => setStateFilter("ALL")} className={pill(stateFilter === "ALL")}>
               All ({counts.ALL})
             </button>
             {STATES.map((s) => (
-              <button
-                key={s}
-                onClick={() => setStateFilter(s)}
-                className={pill(stateFilter === s)}
-              >
+              <button key={s} onClick={() => setStateFilter(s)} className={pill(stateFilter === s)}>
                 {s} ({counts[s]})
               </button>
             ))}
@@ -219,9 +195,9 @@ function FeedInner() {
         </div>
       </div>
 
-      {/* Two-pane layout */}
+      {/* Layout */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Left: list */}
+        {/* Left: cards */}
         <div className="space-y-3 lg:col-span-5">
           {loading ? (
             <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
@@ -230,15 +206,12 @@ function FeedInner() {
           ) : (
             filtered.map((j) => {
               const isActive = selected?.id === j.id;
-
               const chip = j.recommend
                 ? "bg-green-50 text-green-700 ring-1 ring-green-200"
                 : "bg-red-50 text-red-700 ring-1 ring-red-200";
 
-              // Vertical, clearer layout
               const CardInner = (
-                <div className="w-full text-left">
-                  {/* Top meta row */}
+                <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <span>{timeAgo(j.created_at ?? undefined)}</span>
                     {j.recommend !== null && (
@@ -247,39 +220,41 @@ function FeedInner() {
                       </span>
                     )}
                   </div>
-
-                  {/* Title */}
-                  <div className="mt-2 font-semibold leading-snug line-clamp-2">
-                    {j.title || "Untitled"}
-                  </div>
-
-                  {/* Location / business */}
-                  <div className="mt-1 text-sm text-gray-600">
-                    {j.business_name ? `${j.business_name} • ` : ""}
+                  <h3 className="font-semibold text-base leading-snug line-clamp-2">{j.title || "Untitled"}</h3>
+                  <p className="text-sm text-gray-600">
+                    {j.business_name && <span className="font-medium">{j.business_name}</span>}
+                  </p>
+                  <p className="text-sm text-gray-500">
                     {j.suburb}, {j.state} {j.postcode}
-                  </div>
+                  </p>
+                  {j.cost && (
+                    <p className="text-sm text-gray-700">
+                      {j.cost_type === "range"
+                        ? `Cost: ${j.cost}`
+                        : j.cost_type === "na"
+                        ? "Cost: Prefer not to say"
+                        : `Cost: $${j.cost}`}
+                    </p>
+                  )}
                 </div>
               );
 
               return (
                 <div
                   key={j.id}
-                  className={`relative rounded-2xl border bg-white p-4 transition ${
+                  className={`rounded-2xl border bg-white p-4 transition ${
                     isActive ? "border-blue-400 ring-2 ring-blue-100" : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
-                  {/* Desktop: select into right panel */}
                   <button
                     onClick={() => {
                       setSelected(j);
                       router.push(`/feed?id=${j.id}`, { scroll: false });
                     }}
-                    className="hidden w-full lg:block"
+                    className="hidden w-full text-left lg:block"
                   >
                     {CardInner}
                   </button>
-
-                  {/* Mobile: open the public page */}
                   <Link href={`/post/${j.id}`} className="block w-full lg:hidden">
                     {CardInner}
                   </Link>
@@ -300,7 +275,6 @@ function FeedInner() {
   );
 }
 
-/* --- helpers --- */
 function timeAgo(iso?: string | null) {
   if (!iso) return "";
   const t = new Date(iso).getTime();
