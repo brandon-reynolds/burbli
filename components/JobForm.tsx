@@ -1,265 +1,267 @@
-// components/JobForm.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
-type Props = { onCreated?: (job: Job) => void };
-type CostType = "exact" | "range" | "na";
+type Props = {
+  mode?: "create" | "update";
+  initial?: Job | null;
+  onCreated?: (job: Job) => void;
+  onSaved?: (job: Job) => void;
+};
 
-export default function JobForm({ onCreated }: Props) {
+const STATES = ["VIC", "NSW", "QLD", "SA", "WA", "TAS", "ACT", "NT"] as const;
+
+export default function JobForm({ mode = "create", initial, onCreated, onSaved }: Props) {
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [business, setBusiness] = useState(initial?.business_name ?? "");
+  const [suburb, setSuburb] = useState(initial?.suburb ?? "");
+  const [state, setState] = useState<string>(initial?.state ?? "VIC");
+  const [postcode, setPostcode] = useState(initial?.postcode ?? "");
+  const [recommend, setRecommend] = useState<boolean>(initial?.recommend ?? true);
+  const [costType, setCostType] = useState<"exact" | "range" | "na">(initial?.cost_type ?? "exact");
+  const [costExact, setCostExact] = useState<string>(
+    initial?.cost_exact != null ? String(initial.cost_exact) : ""
+  );
+  const [costMin, setCostMin] = useState<string>(initial?.cost_min != null ? String(initial.cost_min) : "");
+  const [costMax, setCostMax] = useState<string>(initial?.cost_max != null ? String(initial.cost_max) : "");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+
   const [saving, setSaving] = useState(false);
 
-  const [title, setTitle] = useState("");
-  const [business, setBusiness] = useState("");
-  const [recommend, setRecommend] = useState<"yes" | "no">("yes");
-
-  const [suburb, setSuburb] = useState("");
-  const [state, setState] = useState("VIC");
-  const [postcode, setPostcode] = useState("");
-
-  const [costType, setCostType] = useState<CostType>("exact");
-  const [costExact, setCostExact] = useState<string>("");
-  const [costMin, setCostMin] = useState<string>("");
-  const [costMax, setCostMax] = useState<string>("");
-
-  const [notes, setNotes] = useState("");
-
-  const costHelp = useMemo(() => {
-    if (costType === "exact") return "Exact total (AUD). Whole numbers only, e.g. 2500.";
-    if (costType === "range") return "Enter min and max (AUD). Whole numbers only.";
-    return "If you’d prefer not to share cost, choose this.";
-  }, [costType]);
-
-  function numOrNull(s: string): number | null {
-    const n = Number(s.replace(/[^\d]/g, ""));
-    return Number.isFinite(n) ? n : null;
-  }
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setOwnerId(user?.id ?? null);
+    })();
+  }, []);
 
   async function submit() {
-    // Validate required
-    if (!title.trim() || !business.trim() || !suburb.trim() || !state.trim() || !/^\d{4}$/.test(postcode)) {
-      alert("Please complete: Title, Who did it, Suburb, State, 4-digit Postcode.");
+    if (!title.trim() || !business.trim() || !suburb.trim() || !/^\d{4}$/.test(postcode)) {
+      alert("Please complete required fields (title, who did it, suburb, postcode).");
       return;
     }
-
-    // Build payload
-    const payload: Partial<Job> = {
-      title: title.trim(),
-      business_name: business.trim(),
-      recommend: recommend === "yes",
-      suburb: suburb.trim(),
-      state: state.trim(),
-      postcode: postcode.trim(),
-      cost_type: costType,
-      notes: notes.trim() ? notes.trim() : null,
-    };
-
-    // Cost validation + assignment
-    if (costType === "exact") {
-      const v = numOrNull(costExact);
-      if (v == null) {
-        alert("Please enter a valid exact cost (whole number).");
-        return;
-      }
-      payload.cost_exact = v;
-      payload.cost_min = null;
-      payload.cost_max = null;
-    } else if (costType === "range") {
-      const vMin = numOrNull(costMin);
-      const vMax = numOrNull(costMax);
-      if (vMin == null || vMax == null || vMin > vMax) {
-        alert("Please enter a valid cost range (min ≤ max, whole numbers).");
-        return;
-      }
-      payload.cost_min = vMin;
-      payload.cost_max = vMax;
-      payload.cost_exact = null;
-    } else {
-      payload.cost_exact = null;
-      payload.cost_min = null;
-      payload.cost_max = null;
-    }
-
     setSaving(true);
 
-    // Attach owner_id from current session (correct supabase v2 usage)
-    const { data: { user } } = await supabase.auth.getUser();
-    payload.owner_id = user?.id ?? null;
+    const payload: any = {
+      title: title.trim(),
+      business_name: business.trim(),
+      suburb: suburb.trim(),
+      state,
+      postcode: postcode.trim(),
+      recommend,
+      notes: notes.trim() || null,
+      cost_type: costType,
+      cost_exact: null,
+      cost_min: null,
+      cost_max: null,
+    };
 
-    const { data, error } = await supabase
-      .from("jobs")
-      .insert(payload)
-      .select("*")
-      .single();
+    if (costType === "exact" && costExact.trim()) payload.cost_exact = Number(costExact);
+    if (costType === "range" && costMin.trim() && costMax.trim()) {
+      payload.cost_min = Number(costMin);
+      payload.cost_max = Number(costMax);
+    }
 
-    setSaving(false);
-
-    if (error) {
-      console.error(error);
-      alert("Could not save. Please try again.");
+    if (mode === "update" && initial?.id) {
+      const { data, error } = await supabase
+        .from("jobs")
+        .update(payload)
+        .eq("id", initial.id)
+        .eq("owner_id", ownerId)
+        .select("*")
+        .single();
+      setSaving(false);
+      if (error) {
+        alert("Could not save changes.");
+        return;
+      }
+      onSaved?.(data as Job);
       return;
     }
 
-    // Reset form (keep state for convenience)
-    setTitle("");
-    setBusiness("");
-    setRecommend("yes");
-    setSuburb("");
-    setState("VIC");
-    setPostcode("");
-    setCostType("exact");
-    setCostExact("");
-    setCostMin("");
-    setCostMax("");
-    setNotes("");
-
+    // create
+    payload.owner_id = ownerId ?? null;
+    const { data, error } = await supabase.from("jobs").insert(payload).select("*").single();
+    setSaving(false);
+    if (error) {
+      alert("Could not post. Please try again.");
+      return;
+    }
     onCreated?.(data as Job);
   }
 
   return (
-    <article className="rounded-2xl border bg-white p-5 md:p-6">
-      <h2 className="text-lg font-semibold">Post job</h2>
-      <p className="mt-1 text-sm text-gray-600">
-        Share work you’ve had done — whether you’d recommend it or not.
-      </p>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+      className="rounded-2xl border bg-white p-4 md:p-6 space-y-4"
+    >
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Title</label>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="mt-1 w-full rounded-xl border px-3 py-2"
+          placeholder="e.g. Roof insulation replacement"
+          required
+        />
+      </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="md:col-span-2">
-          <label className="text-sm font-medium text-gray-700">Title *</label>
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Who did it (business or tradie name)</label>
+        <input
+          value={business}
+          onChange={(e) => setBusiness(e.target.value)}
+          className="mt-1 w-full rounded-xl border px-3 py-2"
+          placeholder="Company or tradie"
+          required
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="sm:col-span-1">
+          <label className="block text-sm font-medium text-gray-700">Suburb</label>
           <input
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            placeholder="e.g., New Colorbond roof installed"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-gray-700">Who did it *</label>
-          <input
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            placeholder="Business or tradie name"
-            value={business}
-            onChange={(e) => setBusiness(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-gray-700">Recommend?</label>
-          <select
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            value={recommend}
-            onChange={(e) => setRecommend(e.target.value as "yes" | "no")}
-          >
-            <option value="yes">Yes, I recommend</option>
-            <option value="no">No</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-gray-700">Suburb *</label>
-          <input
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            placeholder="e.g., Epping"
             value={suburb}
             onChange={(e) => setSuburb(e.target.value)}
+            className="mt-1 w-full rounded-xl border px-3 py-2"
+            placeholder="Epping"
+            required
           />
         </div>
-
-        <div>
-          <label className="text-sm font-medium text-gray-700">State *</label>
+        <div className="sm:col-span-1">
+          <label className="block text-sm font-medium text-gray-700">State</label>
           <select
-            className="mt-1 w-full rounded-xl border px-3 py-2"
             value={state}
             onChange={(e) => setState(e.target.value)}
+            className="mt-1 w-full rounded-xl border px-3 py-2"
           >
-            {["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"].map((s) => (
-              <option key={s} value={s}>{s}</option>
+            {STATES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
             ))}
           </select>
         </div>
-
-        <div>
-          <label className="text-sm font-medium text-gray-700">Postcode *</label>
+        <div className="sm:col-span-1">
+          <label className="block text-sm font-medium text-gray-700">Postcode</label>
           <input
+            value={postcode}
+            onChange={(e) => setPostcode(e.target.value)}
             className="mt-1 w-full rounded-xl border px-3 py-2"
-            placeholder="4 digits"
+            placeholder="3076"
             inputMode="numeric"
             pattern="\d{4}"
-            value={postcode}
-            onChange={(e) => setPostcode(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
-          />
-        </div>
-
-        {/* Cost */}
-        <div className="md:col-span-2">
-          <label className="text-sm font-medium text-gray-700">Cost</label>
-          <div className="mt-1 grid grid-cols-1 gap-3 md:grid-cols-4">
-            <select
-              className="rounded-xl border px-3 py-2"
-              value={costType}
-              onChange={(e) => setCostType(e.target.value as CostType)}
-            >
-              <option value="exact">Exact</option>
-              <option value="range">Range</option>
-              <option value="na">Prefer not to say</option>
-            </select>
-
-            {costType === "exact" && (
-              <input
-                className="rounded-xl border px-3 py-2"
-                placeholder="Exact amount"
-                inputMode="numeric"
-                value={costExact}
-                onChange={(e) => setCostExact(e.target.value)}
-              />
-            )}
-
-            {costType === "range" && (
-              <>
-                <input
-                  className="rounded-xl border px-3 py-2"
-                  placeholder="Min"
-                  inputMode="numeric"
-                  value={costMin}
-                  onChange={(e) => setCostMin(e.target.value)}
-                />
-                <input
-                  className="rounded-xl border px-3 py-2"
-                  placeholder="Max"
-                  inputMode="numeric"
-                  value={costMax}
-                  onChange={(e) => setCostMax(e.target.value)}
-                />
-              </>
-            )}
-          </div>
-          <p className="mt-2 text-xs text-gray-500">{costHelp}</p>
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="text-sm font-medium text-gray-700">Details</label>
-          <textarea
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            rows={5}
-            placeholder="Any context you’d like to share…"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            required
           />
         </div>
       </div>
 
-      <div className="mt-5">
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Recommendation</label>
+        <div className="mt-1 flex items-center gap-4">
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              checked={recommend === true}
+              onChange={() => setRecommend(true)}
+            />
+            Recommend
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              checked={recommend === false}
+              onChange={() => setRecommend(false)}
+            />
+            Not recommend
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Cost</label>
+        <div className="mt-2 flex flex-wrap items-center gap-4">
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="radio" checked={costType === "exact"} onChange={() => setCostType("exact")} />
+            Exact
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="radio" checked={costType === "range"} onChange={() => setCostType("range")} />
+            Range
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="radio" checked={costType === "na"} onChange={() => setCostType("na")} />
+            Prefer not to say
+          </label>
+        </div>
+
+        {costType === "exact" && (
+          <div className="mt-2 flex max-w-xs items-center gap-2">
+            <span className="text-gray-500">$</span>
+            <input
+              value={costExact}
+              onChange={(e) => setCostExact(e.target.value)}
+              className="w-full rounded-xl border px-3 py-2"
+              inputMode="numeric"
+              placeholder="e.g. 3500"
+            />
+          </div>
+        )}
+
+        {costType === "range" && (
+          <div className="mt-2 flex max-w-md items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">$</span>
+              <input
+                value={costMin}
+                onChange={(e) => setCostMin(e.target.value)}
+                className="w-32 rounded-xl border px-3 py-2"
+                inputMode="numeric"
+                placeholder="min"
+              />
+            </div>
+            <span className="text-gray-500">–</span>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">$</span>
+              <input
+                value={costMax}
+                onChange={(e) => setCostMax(e.target.value)}
+                className="w-32 rounded-xl border px-3 py-2"
+                inputMode="numeric"
+                placeholder="max"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Details (optional)</label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={5}
+          className="mt-1 w-full rounded-xl border px-3 py-2"
+          placeholder="Any extra context that would help neighbours."
+        />
+      </div>
+
+      <div className="pt-2">
         <button
-          onClick={submit}
+          type="submit"
           disabled={saving}
-          className="rounded-xl bg-gray-900 px-4 py-2 text-white disabled:opacity-60"
+          className="inline-flex items-center rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-black disabled:opacity-60"
         >
-          {saving ? "Saving…" : "Post job"}
+          {saving ? "Saving…" : mode === "update" ? "Save changes" : "Post job"}
         </button>
       </div>
-    </article>
+    </form>
   );
 }
