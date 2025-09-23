@@ -1,4 +1,3 @@
-// app/feed/page.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -17,54 +16,44 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // Filters
   const [q, setQ] = useState("");
   const [stateFilter, setStateFilter] = useState<StateFilter>("ALL");
   const [recOnly, setRecOnly] = useState(false);
 
-  // UI: open menu id for ⋯ on left cards
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-
-  // Track if desktop (for auto-select)
   const isDesktopRef = useRef(false);
 
-  // --- bootstrap (client-only safe) ---
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      isDesktopRef.current = window.matchMedia("(min-width: 1024px)").matches;
+    if (typeof window === "undefined") return;
+    isDesktopRef.current = window.matchMedia("(min-width: 1024px)").matches;
 
-      (async () => {
-        setLoading(true);
-        const [{ data: auth }, { data, error }] = await Promise.all([
-          supabase.auth.getUser(),
-          supabase.from("jobs").select("*").order("created_at", { ascending: false }),
-        ]);
-        setCurrentUserId(auth?.user?.id ?? null);
-        if (error) {
-          console.error(error);
-          setJobs([]);
-        } else {
-          const list = (data ?? []) as Job[];
-          setJobs(list);
-          // Auto-select first on desktop
-          if (isDesktopRef.current && list.length > 0) setSelected(list[0]);
-        }
-        setLoading(false);
-      })();
+    (async () => {
+      setLoading(true);
+      const [{ data: auth }, { data, error }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.from("jobs").select("*").order("created_at", { ascending: false }),
+      ]);
+      setCurrentUserId(auth?.user?.id ?? null);
+      if (error) {
+        console.error(error);
+        setJobs([]);
+      } else {
+        const list = (data ?? []) as Job[];
+        setJobs(list);
+        if (isDesktopRef.current && list.length) setSelected(list[0]);
+      }
+      setLoading(false);
+    })();
 
-      // Close any open menus on outside click
-      const onDocClick = (e: MouseEvent) => {
-        const target = e.target as HTMLElement | null;
-        if (!target) return;
-        // if click is outside a [data-menu-root] container, close menus
-        if (!target.closest("[data-menu-root]")) setMenuOpenId(null);
-      };
-      document.addEventListener("click", onDocClick);
-      return () => document.removeEventListener("click", onDocClick);
-    }
+    const onDocClick = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (!el) return;
+      if (!el.closest("[data-menu-root]")) setMenuOpenId(null);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
   }, []);
 
-  // Derived: search/recommended
   const baseFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return jobs.filter((j) => {
@@ -77,7 +66,6 @@ export default function FeedPage() {
     });
   }, [jobs, q, recOnly]);
 
-  // Counts per state
   const counts = useMemo(() => {
     const map: Record<StateFilter, number> = {
       ALL: baseFiltered.length, VIC: 0, NSW: 0, QLD: 0, SA: 0, WA: 0, TAS: 0, ACT: 0, NT: 0,
@@ -89,7 +77,6 @@ export default function FeedPage() {
     return map;
   }, [baseFiltered]);
 
-  // Apply state filter
   const filtered = useMemo(
     () => baseFiltered.filter((j) => stateFilter === "ALL" || j.state === stateFilter),
     [baseFiltered, stateFilter]
@@ -99,7 +86,7 @@ export default function FeedPage() {
     setQ("");
     setStateFilter("ALL");
     setRecOnly(false);
-    setSelected(isDesktopRef.current && filtered.length > 0 ? filtered[0] : null);
+    setSelected(isDesktopRef.current && filtered.length ? filtered[0] : null);
   }
 
   const pill = (active: boolean) =>
@@ -108,20 +95,29 @@ export default function FeedPage() {
     }`;
 
   function costDisplay(j: Job) {
-    if (j.cost_type === "exact" && j.cost_exact != null)
-      return `$${Math.round(j.cost_exact).toLocaleString()}`;
-    if (j.cost_type === "range" && j.cost_min != null && j.cost_max != null)
-      return `$${Math.round(j.cost_min).toLocaleString()}–$${Math.round(j.cost_max).toLocaleString()}`;
-    const anyJob = j as Record<string, any>;
-    if (typeof anyJob.cost === "number") return `$${Math.round(anyJob.cost).toLocaleString()}`;
-    if (typeof anyJob.cost_text === "string" && anyJob.cost_text.trim()) return anyJob.cost_text.trim();
+    // exact / range
+    if (j.cost_type === "exact" && j.cost_exact != null) {
+      return `$${Math.round(Number(j.cost_exact)).toLocaleString()}`;
+    }
+    if (j.cost_type === "range" && j.cost_min != null && j.cost_max != null) {
+      return `$${Math.round(Number(j.cost_min)).toLocaleString()}–$${Math.round(
+        Number(j.cost_max)
+      ).toLocaleString()}`;
+    }
+    // legacy numeric or numeric string
+    const any = j as Record<string, any>;
+    const legacy = any.cost;
+    if (typeof legacy === "number") return `$${Math.round(legacy).toLocaleString()}`;
+    if (typeof legacy === "string" && legacy.trim() && !Number.isNaN(Number(legacy))) {
+      return `$${Math.round(Number(legacy)).toLocaleString()}`;
+    }
+    if (typeof any.cost_text === "string" && any.cost_text.trim()) return any.cost_text.trim();
     return null;
   }
 
   async function handleDelete(jobId: string) {
     if (!currentUserId) return;
-    const ok = confirm("Delete this post? This cannot be undone.");
-    if (!ok) return;
+    if (!confirm("Delete this post? This cannot be undone.")) return;
     const { error } = await supabase.from("jobs").delete().eq("id", jobId).eq("owner_id", currentUserId);
     if (error) {
       alert("Could not delete. Please try again.");
@@ -132,9 +128,9 @@ export default function FeedPage() {
     setMenuOpenId(null);
   }
 
-  function reportJob(j: Job) {
-    setMenuOpenId(null);
+  function reportJob() {
     alert("Thanks for the report — we’ll review this post.");
+    setMenuOpenId(null);
   }
 
   return (
@@ -200,7 +196,7 @@ export default function FeedPage() {
 
       {/* Two-pane */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Left: list */}
+        {/* Left list */}
         <div className="space-y-3 lg:col-span-5">
           {loading ? (
             <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
@@ -215,120 +211,134 @@ export default function FeedPage() {
               const cost = costDisplay(j);
               const isMine = currentUserId && j.owner_id === currentUserId;
 
-              const CardContent = (
-                <div className="flex flex-col gap-2">
-                  {/* top row: time, rec chip, menu */}
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>{timeAgo(j.created_at ?? undefined)}</span>
-
-                    <div className="flex items-center gap-2" data-menu-root>
-                      {j.recommend != null && (
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 ${chip}`}>
-                          {j.recommend ? "Recommended" : "Not recommended"}
-                        </span>
-                      )}
-
-                      {/* ⋯ menu */}
-                      <div className="relative">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMenuOpenId((cur) => (cur === j.id ? null : j.id));
-                          }}
-                          className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
-                          aria-haspopup="menu"
-                          aria-expanded={menuOpenId === j.id}
-                          aria-label="More actions"
-                          title="More actions"
-                        >
-                          ⋯
-                        </button>
-
-                        {menuOpenId === j.id && (
-                          <div
-                            role="menu"
-                            className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg"
+              return (
+                <div
+                  key={j.id}
+                  className={`relative rounded-2xl border bg-white p-4 transition ${
+                    isActive ? "border-blue-400 ring-2 ring-blue-100" : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  {/* Entire card is clickable (desktop) */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelected(j)}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setSelected(j)}
+                    className="hidden lg:block"
+                  >
+                    {/* top row */}
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>{timeAgo(j.created_at ?? undefined)}</span>
+                      <div className="flex items-center gap-2" data-menu-root>
+                        {j.recommend != null && (
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 ${chip}`}>
+                            {j.recommend ? "Recommended" : "Not recommended"}
+                          </span>
+                        )}
+                        {/* ⋯ menu trigger */}
+                        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMenuOpenId((cur) => (cur === j.id ? null : j.id));
+                            }}
+                            className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                            aria-haspopup="menu"
+                            aria-expanded={menuOpenId === j.id}
+                            aria-label="More actions"
+                            title="More actions"
                           >
-                            {isMine ? (
-                              <>
-                                <Link
-                                  href="/myposts"
-                                  role="menuitem"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMenuOpenId(null);
-                                  }}
-                                  className="block rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
-                                >
-                                  Edit
-                                </Link>
+                            ⋯
+                          </button>
+                          {menuOpenId === j.id && (
+                            <div role="menu" className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg">
+                              {isMine ? (
+                                <>
+                                  <Link
+                                    href={`/edit/${j.id}`}
+                                    role="menuitem"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setMenuOpenId(null);
+                                    }}
+                                    className="block rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
+                                  >
+                                    Edit
+                                  </Link>
+                                  <button
+                                    role="menuitem"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDelete(j.id);
+                                    }}
+                                    className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              ) : (
                                 <button
                                   role="menuitem"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleDelete(j.id);
+                                    reportJob();
                                   }}
-                                  className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                  className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-gray-50"
                                 >
-                                  Delete
+                                  Report
                                 </button>
-                              </>
-                            ) : (
-                              <button
-                                role="menuitem"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  reportJob(j);
-                                }}
-                                className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-gray-50"
-                              >
-                                Report
-                              </button>
-                            )}
-                          </div>
-                        )}
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    {/* title */}
+                    <h3 className="mt-1 font-semibold text-base leading-snug line-clamp-2">
+                      {j.title || "Untitled"}
+                    </h3>
+
+                    {/* business */}
+                    {j.business_name && (
+                      <p className="text-sm text-gray-700 font-medium mt-1">{j.business_name}</p>
+                    )}
+
+                    {/* location */}
+                    <p className="text-sm text-gray-500 mt-1">
+                      {j.suburb}, {j.state} {j.postcode}
+                    </p>
+
+                    {/* cost */}
+                    {cost && <p className="text-sm text-gray-700 mt-1">{cost}</p>}
                   </div>
 
-                  {/* title */}
-                  <h3 className="font-semibold text-base leading-snug line-clamp-2">
-                    {j.title || "Untitled"}
-                  </h3>
-
-                  {/* business */}
-                  {j.business_name && (
-                    <p className="text-sm text-gray-700 font-medium">{j.business_name}</p>
-                  )}
-
-                  {/* location */}
-                  <p className="text-sm text-gray-500">
-                    {j.suburb}, {j.state} {j.postcode}
-                  </p>
-
-                  {/* cost */}
-                  {cost && <p className="text-sm text-gray-700">{cost}</p>}
-                </div>
-              );
-
-              return (
-                <div
-                  key={j.id}
-                  className={`rounded-2xl border bg-white p-4 transition ${
-                    isActive ? "border-blue-400 ring-2 ring-blue-100" : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  {/* Desktop: select into right panel */}
-                  <button
-                    onClick={() => setSelected(j)}
-                    className="hidden w-full text-left lg:block"
-                  >
-                    {CardContent}
-                  </button>
-
-                  {/* Mobile: open public page */}
-                  <Link href={`/post/${j.id}`} className="block w-full lg:hidden">
-                    {CardContent}
+                  {/* Mobile: open detail page instead of 2-pane */}
+                  <Link href={`/post/${j.id}`} className="block lg:hidden">
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>{timeAgo(j.created_at ?? undefined)}</span>
+                      {j.recommend != null && (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 ${
+                            j.recommend
+                              ? "bg-green-50 text-green-700 ring-1 ring-green-200"
+                              : "bg-red-50 text-red-700 ring-1 ring-red-200"
+                          }`}
+                        >
+                          {j.recommend ? "Recommended" : "Not recommended"}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="mt-1 font-semibold text-base leading-snug line-clamp-2">
+                      {j.title || "Untitled"}
+                    </h3>
+                    {j.business_name && (
+                      <p className="text-sm text-gray-700 font-medium mt-1">{j.business_name}</p>
+                    )}
+                    <p className="text-sm text-gray-500 mt-1">
+                      {j.suburb}, {j.state} {j.postcode}
+                    </p>
+                    {cost && <p className="text-sm text-gray-700 mt-1">{cost}</p>}
                   </Link>
                 </div>
               );
@@ -336,7 +346,7 @@ export default function FeedPage() {
           )}
         </div>
 
-        {/* Right: detail */}
+        {/* Right detail */}
         <div className="hidden lg:block lg:col-span-7">
           <div className="lg:sticky lg:top-24">
             <JobDetailCard job={selected} />
@@ -347,7 +357,6 @@ export default function FeedPage() {
   );
 }
 
-/* helpers */
 function timeAgo(iso?: string | null) {
   if (!iso) return "";
   const t = new Date(iso).getTime();
