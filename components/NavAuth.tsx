@@ -6,10 +6,20 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 /**
- * variant="inline" -> desktop header row
- * variant="menu"   -> stacked items in the mobile dropdown
+ * Props:
+ * - variant: "inline" (desktop row) | "menu" (mobile dropdown)
+ * - currentPath: used to highlight "My posts" when at /myposts
+ * - onAction: optional callback (used on mobile to close menu after click)
  */
-export default function NavAuth({ variant = "inline" }: { variant?: "inline" | "menu" }) {
+export default function NavAuth({
+  variant = "inline",
+  currentPath,
+  onAction,
+}: {
+  variant?: "inline" | "menu";
+  currentPath?: string;
+  onAction?: () => void;
+}) {
   const [email, setEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -27,33 +37,91 @@ export default function NavAuth({ variant = "inline" }: { variant?: "inline" | "
   }, []);
 
   async function signOut() {
+    onAction?.();
     await supabase.auth.signOut();
     window.location.href = "/";
   }
 
-  // While loading, show Sign in to avoid layout jump
-  if (loading || !email) {
+  // class helpers
+  const baseInline = "px-3 py-2 rounded-xl text-sm";
+  const baseMenu = "px-3 py-2 rounded-lg text-sm";
+  const active = "bg-gray-900 text-white";
+  const hoverInline = "hover:bg-gray-100";
+  const hoverMenu = "hover:bg-gray-50";
+  const isActive = (p?: string) => currentPath === p;
+
+  if (loading) {
+    // deterministic placeholder to avoid layout shift
     return variant === "menu" ? (
-      <Link href="/signin" className="px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Sign in</Link>
+      <Link href="/signin" className={`${baseMenu} ${hoverMenu}`}>Sign in</Link>
     ) : (
-      <Link href="/signin" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">Sign in</Link>
+      <Link href="/signin" className={`${baseInline} ${hoverInline}`}>Sign in</Link>
+    );
+  }
+
+  // Signed out
+  if (!email) {
+    return variant === "menu" ? (
+      <Link
+        href="/signin"
+        onClick={() => onAction?.()}
+        aria-current={isActive("/signin") ? "page" : undefined}
+        className={[baseMenu, isActive("/signin") ? active : hoverMenu].join(" ")}
+      >
+        Sign in
+      </Link>
+    ) : (
+      <Link
+        href="/signin"
+        aria-current={isActive("/signin") ? "page" : undefined}
+        className={[baseInline, isActive("/signin") ? active : hoverInline].join(" ")}
+      >
+        Sign in
+      </Link>
     );
   }
 
   // Signed in
-  return variant === "menu" ? (
-    <>
-      <Link href="/myposts" className="px-3 py-2 rounded-lg text-sm hover:bg-gray-50">My posts</Link>
-      <button onClick={signOut} className="px-3 py-2 rounded-lg text-sm border hover:bg-gray-50 text-left">
+  const myPostsLink =
+    variant === "menu" ? (
+      <Link
+        href="/myposts"
+        onClick={() => onAction?.()}
+        aria-current={isActive("/myposts") ? "page" : undefined}
+        className={[baseMenu, isActive("/myposts") ? active : hoverMenu].join(" ")}
+      >
+        My posts
+      </Link>
+    ) : (
+      <Link
+        href="/myposts"
+        aria-current={isActive("/myposts") ? "page" : undefined}
+        className={[baseInline, isActive("/myposts") ? active : hoverInline].join(" ")}
+      >
+        My posts
+      </Link>
+    );
+
+  const signOutBtn =
+    variant === "menu" ? (
+      <button onClick={signOut} className={`${baseMenu} border ${hoverMenu} text-left`}>
         Sign out
       </button>
+    ) : (
+      <button onClick={signOut} className={`${baseInline} border ${hoverInline}`}>
+        Sign out
+      </button>
+    );
+
+  return variant === "menu" ? (
+    <>
+      {myPostsLink}
+      {signOutBtn}
     </>
   ) : (
     <div className="flex items-center gap-2">
-      <Link href="/myposts" className="px-3 py-2 rounded-xl text-sm hover:bg-gray-100">My posts</Link>
-      <button onClick={signOut} className="px-3 py-2 rounded-xl text-sm border hover:bg-gray-50">
-        Sign out
-      </button>
+      {myPostsLink}
+      {signOutBtn}
     </div>
   );
 }
