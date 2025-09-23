@@ -1,7 +1,6 @@
 // app/layout.tsx
 import "./globals.css";
 import Link from "next/link";
-import SiteNav from "@/components/SiteNav";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
