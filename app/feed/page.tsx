@@ -58,7 +58,7 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(false);
   const [canLoadMore, setCanLoadMore] = useState(true);
   const pageRef = useRef(0);
-  const PAGE = 14;
+  const PAGE = 16;
 
   // selection (for detail pane)
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -76,12 +76,11 @@ export default function FeedPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQ, stateFilter, onlyRecommended]);
 
-  useEffect(() => { void loadPage(true); /* first load */ }, []); // eslint-disable-line
+  useEffect(() => { void loadPage(true); }, []); // eslint-disable-line
 
   // keep selected in sync with current list
   useEffect(() => {
     if (items.length === 0) { setSelectedId(null); return; }
-    // if current selection not in list, default to first item
     if (!selectedId || !items.find(i => i.id === selectedId)) {
       setSelectedId(items[0].id);
     }
@@ -125,104 +124,133 @@ export default function FeedPage() {
     <section className="grid gap-4 md:grid-cols-12">
       {/* LEFT: filters + list */}
       <div className="md:col-span-5 md:pr-2">
-        {/* Filters */}
+        {/* Filters (search → states → recommended) */}
         <div className="rounded-2xl border bg-white p-3 md:p-4 sticky top-[72px] z-10">
-          <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
-            {/* Search */}
-            <div className="relative flex-1">
-              <input
-                className="w-full rounded-xl border pl-9 pr-3 py-2"
-                placeholder="Search job, business, suburb, postcode"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-              />
-              <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" viewBox="0 0 24 24" aria-hidden>
-                <path d="M21 21l-4.3-4.3m1.1-5.1a6.8 6.8 0 11-13.6 0 6.8 6.8 0 0113.6 0z" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-              </svg>
-            </div>
-
-            {/* State pills */}
-            <div className="flex flex-wrap gap-2">
-              {STATES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStateFilter(s)}
-                  className={[
-                    "px-3 py-1.5 rounded-full text-xs border",
-                    stateFilter === s ? "bg-gray-900 text-white border-gray-900" : "hover:bg-gray-50",
-                  ].join(" ")}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-
-            {/* Recommended only */}
-            <label className="inline-flex items-center gap-2 text-sm ml-auto">
-              <input type="checkbox" checked={onlyRecommended} onChange={(e) => setOnlyRecommended(e.target.checked)} />
-              Recommended only
-            </label>
+          {/* Search */}
+          <div className="relative">
+            <input
+              className="w-full rounded-xl border pl-9 pr-3 py-2"
+              placeholder="Search job, business, suburb, postcode"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" viewBox="0 0 24 24" aria-hidden>
+              <path d="M21 21l-4.3-4.3m1.1-5.1a6.8 6.8 0 11-13.6 0 6.8 6.8 0 0113.6 0z" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+            </svg>
           </div>
+
+          {/* State pills */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {STATES.map((s) => (
+              <button
+                key={s}
+                onClick={() => setStateFilter(s)}
+                className={[
+                  "px-3 py-1.5 rounded-full text-xs border",
+                  stateFilter === s ? "bg-gray-900 text-white border-gray-900" : "hover:bg-gray-50",
+                ].join(" ")}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          {/* Recommended only */}
+          <label className="mt-3 inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={onlyRecommended}
+              onChange={(e) => setOnlyRecommended(e.target.checked)}
+            />
+            Recommended only
+          </label>
         </div>
 
-        {/* List */}
-        <div className="mt-3 space-y-2">
-          {items.length === 0 && !loading && (
-            <div className="rounded-2xl border bg-white p-4 text-sm text-gray-600">No results</div>
-          )}
+        {/* Condensed list */}
+        <div className="mt-3 rounded-2xl border bg-white overflow-hidden">
+          <ul className="divide-y">
+            {items.length === 0 && !loading && (
+              <li className="px-4 py-6 text-sm text-gray-600">No results</li>
+            )}
 
-          {items.map((j) => (
-            <button
-              key={j.id}
-              onClick={() => setSelectedId(j.id)}
-              aria-current={selectedId === j.id ? "true" : undefined}
-              className={[
-                "w-full rounded-2xl border bg-white p-4 text-left transition",
-                selectedId === j.id ? "ring-2 ring-gray-900 border-gray-900" : "hover:bg-gray-50",
-              ].join(" ")}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="font-medium leading-tight line-clamp-2">{j.title || "Untitled job"}</h3>
-                <span
+            {items.map((j) => (
+              <li key={j.id}>
+                <button
+                  onClick={() => setSelectedId(j.id)}
+                  aria-current={selectedId === j.id ? "true" : undefined}
                   className={[
-                    "shrink-0 rounded-full px-2 py-0.5 text-xs border",
-                    j.recommend ? "bg-green-50 text-green-800 border-green-200" : "bg-red-50 text-red-800 border-red-200",
+                    "w-full text-left px-4 py-3 transition",
+                    selectedId === j.id
+                      ? "bg-gray-50 ring-inset ring-2 ring-gray-900"
+                      : "hover:bg-gray-50",
                   ].join(" ")}
                 >
-                  {j.recommend ? "Recommended" : "Not recommended"}
-                </span>
-              </div>
+                  {/* Row 1: dot + title + age + rec badge (compact) */}
+                  <div className="flex items-start gap-2">
+                    <span
+                      className={[
+                        "mt-1 inline-block h-2 w-2 rounded-full",
+                        j.recommend ? "bg-green-600" : "bg-red-600",
+                      ].join(" ")}
+                      aria-hidden
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-start gap-3">
+                        <h3 className="font-medium leading-tight line-clamp-1">
+                          {j.title || "Untitled job"}
+                        </h3>
+                        <span className="ml-auto shrink-0 text-xs text-gray-400">
+                          {since(j.created_at)}
+                        </span>
+                      </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-600">
-                {j.business_name && <span className="rounded-lg border px-2 py-1 bg-gray-50">{j.business_name}</span>}
-                <span className="rounded-lg border px-2 py-1 bg-gray-50">{j.suburb}, {j.state} {j.postcode}</span>
-                <span className="rounded-lg border px-2 py-1 bg-gray-50">{costLabel(j)}</span>
-                <span className="text-xs text-gray-400 ml-auto">{since(j.created_at)}</span>
-              </div>
-            </button>
-          ))}
+                      {/* Row 2: compact meta */}
+                      <div className="mt-1 text-[13px] text-gray-600 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {j.business_name && <span className="truncate">{j.business_name}</span>}
+                        <span className="truncate">{j.suburb}, {j.state} {j.postcode}</span>
+                        <span className="truncate">{costLabel(j)}</span>
+                        <span
+                          className={[
+                            "ml-auto rounded-full px-2 py-0.5 text-[11px] border",
+                            j.recommend
+                              ? "bg-green-50 text-green-800 border-green-200"
+                              : "bg-red-50 text-red-800 border-red-200",
+                          ].join(" ")}
+                        >
+                          {j.recommend ? "Recommended" : "Not recommended"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </li>
+            ))}
 
-          {/* Loading skeletons */}
-          {loading && (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="rounded-2xl border bg-white p-4 animate-pulse">
-                  <div className="h-4 w-1/2 bg-gray-200 rounded" />
-                  <div className="mt-3 h-3 w-1/3 bg-gray-200 rounded" />
-                  <div className="mt-4 h-3 w-2/3 bg-gray-200 rounded" />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {!loading && canLoadMore && (
-            <div className="flex justify-center pt-2">
-              <button onClick={() => loadPage(false)} className="px-4 py-2 rounded-xl border bg-white hover:bg-gray-50">
-                Load more
-              </button>
-            </div>
-          )}
+            {/* Loading skeletons */}
+            {loading && (
+              <>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <li key={i} className="px-4 py-3">
+                    <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse" />
+                    <div className="mt-2 h-3 w-2/3 bg-gray-200 rounded animate-pulse" />
+                  </li>
+                ))}
+              </>
+            )}
+          </ul>
         </div>
+
+        {/* Load more */}
+        {!loading && canLoadMore && (
+          <div className="flex justify-center pt-2">
+            <button
+              onClick={() => loadPage(false)}
+              className="px-4 py-2 rounded-xl border bg-white hover:bg-gray-50"
+            >
+              Load more
+            </button>
+          </div>
+        )}
       </div>
 
       {/* RIGHT: detail pane */}
@@ -247,15 +275,13 @@ function DetailPane({ job }: { job: Job | null }) {
   const link = `/post/${job.id}`;
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}${link}` : link;
 
-  const notes = job.notes?.trim() ?? "";
-
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     } catch {
-      // no-op
+      // ignore
     }
   }
 
@@ -280,12 +306,11 @@ function DetailPane({ job }: { job: Job | null }) {
         <span className="text-xs text-gray-400 ml-auto">{since(job.created_at)}</span>
       </div>
 
-      {notes && (
-        <div className="mt-4 text-sm text-gray-800 whitespace-pre-wrap">{notes}</div>
+      {job.notes?.trim() && (
+        <div className="mt-4 text-sm text-gray-800 whitespace-pre-wrap">{job.notes.trim()}</div>
       )}
 
       <div className="mt-5 flex flex-wrap gap-2">
-        {/* No 'Open' button per your request */}
         <button onClick={copyLink} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50">
           {copied ? "Copied!" : "Copy link"}
         </button>
