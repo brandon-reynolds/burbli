@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 type Job = {
   id: string;
@@ -107,21 +108,34 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
         </h2>
       </section>
 
-      {/* quick tags (location) */}
-      <div className="mt-3 flex flex-wrap gap-2 text-sm">
-        {job.business_name && (
-          <span className="rounded-lg border bg-gray-50 px-2 py-1">{job.business_name}</span>
-        )}
-        <span className="rounded-lg border bg-gray-50 px-2 py-1">
-          {job.suburb}, {job.state} {job.postcode}
-        </span>
-      </div>
-
-      {/* FIELD: Who did it */}
+      {/* FIELD: Who did it (clickable to search) */}
       <section className="mt-6">
         <div className="text-[11px] uppercase tracking-wide text-gray-500">Who did it</div>
         <div className="mt-1 text-[15px] text-gray-900">
-          {job.business_name || "Not specified"}
+          {job.business_name ? (
+            <Link
+              href={`/feed?q=${encodeURIComponent(job.business_name)}`}
+              className="underline hover:no-underline"
+            >
+              {job.business_name}
+            </Link>
+          ) : (
+            "Not specified"
+          )}
+        </div>
+      </section>
+
+      {/* FIELD: Location (clearer suburb) */}
+      <section className="mt-6">
+        <div className="text-[11px] uppercase tracking-wide text-gray-500">Location</div>
+        <div className="mt-1 text-[15px] text-gray-900">
+          <Link
+            href={`/feed?q=${encodeURIComponent(job.suburb)}`}
+            className="underline hover:no-underline"
+          >
+            {job.suburb}
+          </Link>
+          {", "}{job.state} {job.postcode}
         </div>
       </section>
 
