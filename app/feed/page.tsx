@@ -28,10 +28,12 @@ function FeedInner() {
   const params = useSearchParams();
   const router = useRouter();
 
+  // UI filters
   const [q, setQ] = useState("");
   const [stateFilter, setStateFilter] = useState<StateFilter>("ALL");
   const [recOnly, setRecOnly] = useState(false);
 
+  // track media query for desktop
   const isDesktopRef = useRef<boolean>(false);
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -39,6 +41,7 @@ function FeedInner() {
     }
   }, []);
 
+  // Load jobs
   useEffect(() => {
     let ignore = false;
     (async () => {
@@ -58,6 +61,7 @@ function FeedInner() {
     };
   }, []);
 
+  // Base filtered by search + recommended (for counts)
   const baseFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return jobs.filter((j) => {
@@ -75,6 +79,7 @@ function FeedInner() {
     });
   }, [jobs, q, recOnly]);
 
+  // State counts
   const counts = useMemo(() => {
     const map: Record<StateFilter, number> = {
       ALL: baseFiltered.length,
@@ -94,16 +99,19 @@ function FeedInner() {
     return map;
   }, [baseFiltered]);
 
+  // Apply state filter
   const filtered = useMemo(() => {
     return baseFiltered.filter((j) => stateFilter === "ALL" || j.state === stateFilter);
   }, [baseFiltered, stateFilter]);
 
+  // Restore selection from ?id=
   useEffect(() => {
     const id = params.get("id");
     if (!id || jobs.length === 0) return;
     setSelected(jobs.find((j) => j.id === id) ?? null);
   }, [params, jobs]);
 
+  // Auto-select first on desktop
   useEffect(() => {
     if (!isDesktopRef.current) return;
     if (selected) return;
@@ -113,6 +121,7 @@ function FeedInner() {
     }
   }, [filtered, loading, selected, router]);
 
+  // Clear filters
   function clearFilters() {
     setQ("");
     setStateFilter("ALL");
@@ -139,7 +148,7 @@ function FeedInner() {
                 placeholder="Search by title, business, suburb or postcode"
                 className="w-full rounded-xl border pl-9 pr-9 py-2"
               />
-              <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" viewBox="0 0 24 24">
+              <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" viewBox="0 0 24 24" aria-hidden>
                 <path
                   d="M21 21l-4.3-4.3m1.1-5.1a6.8 6.8 0 11-13.6 0 6.8 6.8 0 0113.6 0z"
                   stroke="currentColor"
@@ -153,6 +162,7 @@ function FeedInner() {
                   type="button"
                   onClick={() => setQ("")}
                   className="absolute right-2 top-1.5 h-7 w-7 grid place-items-center rounded-lg hover:bg-gray-100"
+                  aria-label="Clear search"
                 >
                   <svg viewBox="0 0 24 24" className="h-4 w-4 text-gray-500">
                     <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -210,6 +220,14 @@ function FeedInner() {
                 ? "bg-green-50 text-green-700 ring-1 ring-green-200"
                 : "bg-red-50 text-red-700 ring-1 ring-red-200";
 
+              // Compute cost display from cost_* fields
+              const costDisplay =
+                j.cost_type === "exact" && j.cost_exact != null
+                  ? `Cost: $${Math.round(j.cost_exact).toLocaleString()}`
+                  : j.cost_type === "range" && j.cost_min != null && j.cost_max != null
+                  ? `Cost: $${Math.round(j.cost_min).toLocaleString()}–$${Math.round(j.cost_max).toLocaleString()}`
+                  : null;
+
               const CardInner = (
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs text-gray-500">
@@ -220,22 +238,20 @@ function FeedInner() {
                       </span>
                     )}
                   </div>
-                  <h3 className="font-semibold text-base leading-snug line-clamp-2">{j.title || "Untitled"}</h3>
-                  <p className="text-sm text-gray-600">
-                    {j.business_name && <span className="font-medium">{j.business_name}</span>}
-                  </p>
+
+                  <h3 className="font-semibold text-base leading-snug line-clamp-2">
+                    {j.title || "Untitled"}
+                  </h3>
+
+                  {j.business_name && (
+                    <p className="text-sm text-gray-700 font-medium">{j.business_name}</p>
+                  )}
+
                   <p className="text-sm text-gray-500">
                     {j.suburb}, {j.state} {j.postcode}
                   </p>
-                  {j.cost && (
-                    <p className="text-sm text-gray-700">
-                      {j.cost_type === "range"
-                        ? `Cost: ${j.cost}`
-                        : j.cost_type === "na"
-                        ? "Cost: Prefer not to say"
-                        : `Cost: $${j.cost}`}
-                    </p>
-                  )}
+
+                  {costDisplay && <p className="text-sm text-gray-700">{costDisplay}</p>}
                 </div>
               );
 
@@ -246,6 +262,7 @@ function FeedInner() {
                     isActive ? "border-blue-400 ring-2 ring-blue-100" : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
+                  {/* Desktop: select into right panel */}
                   <button
                     onClick={() => {
                       setSelected(j);
@@ -255,6 +272,8 @@ function FeedInner() {
                   >
                     {CardInner}
                   </button>
+
+                  {/* Mobile: open the public page */}
                   <Link href={`/post/${j.id}`} className="block w-full lg:hidden">
                     {CardInner}
                   </Link>
@@ -275,6 +294,7 @@ function FeedInner() {
   );
 }
 
+/* --- helpers --- */
 function timeAgo(iso?: string | null) {
   if (!iso) return "";
   const t = new Date(iso).getTime();
