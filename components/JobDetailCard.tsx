@@ -2,10 +2,22 @@
 "use client";
 
 import type { Job } from "@/types";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function JobDetailCard({ job }: { job: Job | null }) {
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!ignore) setCurrentUserId(user?.id ?? null);
+    })();
+    return () => { ignore = true; };
+  }, []);
+
   if (!job) {
     return (
       <div className="rounded-2xl border bg-white p-6 text-gray-500">
@@ -39,21 +51,41 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     } catch {}
   }
 
+  // Build query-link helpers so clicking updates the Feed search (&q=...)
+  function linkToFeedWithQ(q: string) {
+    const qs = new URLSearchParams();
+    qs.set("q", q);
+    return `/feed?${qs.toString()}`;
+  }
+
   return (
     <article className="rounded-2xl border bg-white p-5 md:p-6">
       <div className="flex items-start justify-between gap-4">
         <span className="text-xs text-gray-500">{timeAgo(job.created_at)}</span>
-        {job.recommend != null && (
-          <span
-            className={`inline-flex items-center rounded-full px-3 py-1 text-xs ${
-              job.recommend
-                ? "bg-green-50 text-green-700 ring-1 ring-green-200"
-                : "bg-red-50 text-red-700 ring-1 ring-red-200"
-            }`}
-          >
-            {job.recommend ? "Recommended" : "Not recommended"}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {job.recommend != null && (
+            <span
+              className={`inline-flex items-center rounded-full px-3 py-1 text-xs ${
+                job.recommend
+                  ? "bg-green-50 text-green-700 ring-1 ring-green-200"
+                  : "bg-red-50 text-red-700 ring-1 ring-red-200"
+              }`}
+            >
+              {job.recommend ? "Recommended" : "Not recommended"}
+            </span>
+          )}
+          {/* Edit shortcut if I own this */}
+          {currentUserId && job.owner_id === currentUserId && (
+            <Link
+              href="/myposts"
+              className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+              aria-label="Edit post"
+              title="Edit post"
+            >
+              ⋯
+            </Link>
+          )}
+        </div>
       </div>
 
       <h2 className="mt-3 text-2xl font-semibold tracking-tight text-gray-900">
@@ -64,7 +96,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Who did it</div>
         {job.business_name ? (
           <Link
-            href={`/feed?q=${encodeURIComponent(job.business_name)}`}
+            href={linkToFeedWithQ(job.business_name)}
             className="mt-1 inline-block text-base underline"
           >
             {job.business_name}
@@ -78,12 +110,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Location</div>
         <div className="mt-1 text-base">
           {job.suburb ? (
-            <Link
-              href={`/feed?q=${encodeURIComponent(job.suburb)}${
-                job.state ? ` ${encodeURIComponent(job.state)}` : ""
-              }`}
-              className="underline"
-            >
+            <Link href={linkToFeedWithQ(`${job.suburb} ${job.state ?? ""}`.trim())} className="underline">
               {job.suburb}
             </Link>
           ) : (
@@ -95,7 +122,8 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
 
       <section className="mt-6">
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cost</div>
-        <div className="mt-1 text-2xl font-semibold">{costDisplay}</div>
+        {/* match other field sizing (no huge heading) */}
+        <div className="mt-1 text-base font-semibold">{costDisplay}</div>
       </section>
 
       {job.notes && (
