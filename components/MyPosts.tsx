@@ -2,331 +2,162 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
-type Draft = {
-  title: string | null;
-  business_name: string | null;
-  suburb: string | null;
-  state: string | null;
-  postcode: string | null;
-  recommend: boolean | null;
-  cost_type: "exact" | "range" | "na" | null;
-  cost_exact?: number | null;
-  cost_min?: number | null;
-  cost_max?: number | null;
-  notes?: string | null;
-};
+function costDisplay(j: Job) {
+  if (j.cost_type === "exact" && j.cost != null && String(j.cost).trim() !== "") {
+    const n = Number(j.cost);
+    return isFinite(n) ? `$${Math.round(n).toLocaleString()}` : `$${String(j.cost)}`;
+  }
+  if (j.cost_type === "range" && j.cost_min != null && j.cost_max != null) {
+    const minN = Number(j.cost_min);
+    const maxN = Number(j.cost_max);
+    const left = isFinite(minN) ? Math.round(minN).toLocaleString() : String(j.cost_min);
+    const right = isFinite(maxN) ? Math.round(maxN).toLocaleString() : String(j.cost_max);
+    return `$${left}–$${right}`;
+  }
+  return "Cost not shared";
+}
 
 export default function MyPosts() {
   const [userId, setUserId] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<Job[]>([]);
-  const [saving, setSaving] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
-  const [draft, setDraft] = useState<Draft>({
-    title: null,
-    business_name: null,
-    suburb: null,
-    state: "VIC",
-    postcode: null,
-    recommend: true,
-    cost_type: "na",
-    cost_exact: null,
-    cost_min: null,
-    cost_max: null,
-    notes: null,
-  });
-
-  // auth + load
   useEffect(() => {
-    let ignore = false;
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        if (typeof window !== "undefined") window.location.href = "/signin";
+      const uid = user?.id ?? null;
+      setUserId(uid);
+      if (!uid) {
+        window.location.href = "/signin";
         return;
       }
-      if (ignore) return;
-      setUserId(user.id);
-
       setLoading(true);
       const { data, error } = await supabase
         .from("jobs")
         .select("*")
-        .eq("owner_id", user.id)
+        .eq("owner_id", uid)
         .order("created_at", { ascending: false });
-      if (!ignore) {
-        if (error) {
-          console.error(error);
-          setItems([]);
-        } else {
-          setItems((data ?? []) as Job[]);
-        }
-        setLoading(false);
-      }
+      if (!error) setJobs((data ?? []) as Job[]);
+      setLoading(false);
     })();
-    return () => { ignore = true; };
+
+    const onDocClick = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (!el) return;
+      if (!el.closest("[data-menu-root]")) setMenuOpenId(null);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
   }, []);
 
-  function set<K extends keyof Draft>(key: K, val: Draft[K]) {
-    setDraft((d) => ({ ...d, [key]: val }));
-  }
-
-  const costHelp = useMemo(() => {
-    if (draft.cost_type === "exact") return "Exact total (AUD) — whole number, e.g. 2500";
-    if (draft.cost_type === "range") return "Enter min and max (AUD) — whole numbers";
-    return "If you’d prefer not to share cost, leave it hidden.";
-  }, [draft.cost_type]);
-
-  async function save() {
-    // Null-safe trims
-    const title = (draft.title ?? "").trim();
-    const suburb = (draft.suburb ?? "").trim();
-    const business = (draft.business_name ?? "").trim();
-    const postcode = (draft.postcode ?? "").trim();
-    const state = (draft.state ?? "").trim();
-
-    // Basic validation
-    if (!title || !suburb || !state || !/^\d{4}$/.test(postcode) || !business) {
-      alert("Please complete required fields: title, who did it, suburb, state, 4-digit postcode.");
-      return;
-    }
-
-    // Cost validation
-    if (draft.cost_type === "exact") {
-      const n = Number(draft.cost_exact);
-      if (!Number.isFinite(n) || n < 0) {
-        alert("Please enter a valid exact cost (whole number).");
-        return;
-      }
-    } else if (draft.cost_type === "range") {
-      const min = Number(draft.cost_min);
-      const max = Number(draft.cost_max);
-      if (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max < 0 || min > max) {
-        alert("Please enter a valid cost range (min ≤ max, whole numbers).");
-        return;
-      }
-    }
-
+  async function handleDelete(id: string) {
     if (!userId) return;
-
-    setSaving(true);
-    // Build payload aligned with your Job schema
-    const payload: Partial<Job> = {
-      owner_id: userId,
-      title,
-      business_name: business,
-      suburb,
-      state,
-      postcode,
-      recommend: draft.recommend ?? true,
-      cost_type: draft.cost_type,
-      cost_exact: draft.cost_type === "exact" ? Number(draft.cost_exact) : null,
-      cost_min: draft.cost_type === "range" ? Number(draft.cost_min) : null,
-      cost_max: draft.cost_type === "range" ? Number(draft.cost_max) : null,
-      notes: (draft.notes ?? "").trim() || null,
-    };
-
-    const { data, error } = await supabase.from("jobs").insert(payload).select("*").single();
-
-    setSaving(false);
-
+    if (!confirm("Delete this post? This cannot be undone.")) return;
+    const { error } = await supabase.from("jobs").delete().eq("id", id).eq("owner_id", userId);
     if (error) {
-      console.error(error);
-      alert("Could not save. Please try again.");
+      alert(`Could not delete. ${error.message ?? ""}`);
       return;
     }
-
-    // Prepend to list
-    setItems((prev) => [data as Job, ...prev]);
-
-    // Reset draft (keep state for convenience)
-    setDraft({
-      title: null,
-      business_name: null,
-      suburb: null,
-      state,
-      postcode: null,
-      recommend: true,
-      cost_type: "na",
-      cost_exact: null,
-      cost_min: null,
-      cost_max: null,
-      notes: null,
-    });
+    setJobs((prev) => prev.filter((j) => j.id !== id));
+    setMenuOpenId(null);
   }
+
+  const total = useMemo(() => jobs.length, [jobs]);
 
   return (
-    <section className="space-y-6">
-      {/* Compose card */}
-      <article className="rounded-2xl border bg-white p-5 md:p-6">
-        <h2 className="text-lg font-semibold">Share your project</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Tell neighbours about work you’ve already had done — whether you’d recommend it or not.
-        </p>
+    <section className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">My posts</h1>
+        <Link href="/submit" className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-black">
+          Share a project
+        </Link>
+      </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium text-gray-700">Title *</label>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              placeholder="e.g., New Colorbond roof installed"
-              value={draft.title ?? ""}
-              onChange={(e) => set("title", e.target.value)}
-            />
-          </div>
+      {loading && <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>}
 
-          <div>
-            <label className="text-sm font-medium text-gray-700">Who did it *</label>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              placeholder="Business or tradie name"
-              value={draft.business_name ?? ""}
-              onChange={(e) => set("business_name", e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-700">Recommend?</label>
-            <select
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              value={String(draft.recommend ?? true)}
-              onChange={(e) => set("recommend", e.target.value === "true")}
-            >
-              <option value="true">Yes, I recommend</option>
-              <option value="false">No</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-700">Suburb *</label>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              placeholder="e.g., Epping"
-              value={draft.suburb ?? ""}
-              onChange={(e) => set("suburb", e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-700">State *</label>
-            <select
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              value={draft.state ?? "VIC"}
-              onChange={(e) => set("state", e.target.value)}
-            >
-              {["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"].map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-700">Postcode *</label>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              placeholder="4 digits"
-              inputMode="numeric"
-              pattern="\d{4}"
-              value={draft.postcode ?? ""}
-              onChange={(e) => set("postcode", e.target.value.replace(/[^\d]/g, "").slice(0,4))}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium text-gray-700">Cost</label>
-            <div className="mt-1 grid grid-cols-1 gap-3 md:grid-cols-4">
-              <select
-                className="rounded-xl border px-3 py-2"
-                value={draft.cost_type ?? "na"}
-                onChange={(e) => set("cost_type", e.target.value as Draft["cost_type"])}
-              >
-                <option value="na">Prefer not to say</option>
-                <option value="exact">Exact</option>
-                <option value="range">Range</option>
-              </select>
-
-              {draft.cost_type === "exact" && (
-                <input
-                  className="rounded-xl border px-3 py-2"
-                  placeholder="Exact amount"
-                  inputMode="numeric"
-                  value={draft.cost_exact ?? ""}
-                  onChange={(e) => set("cost_exact", Number(e.target.value.replace(/[^\d]/g, "")) || null)}
-                />
-              )}
-
-              {draft.cost_type === "range" && (
-                <>
-                  <input
-                    className="rounded-xl border px-3 py-2"
-                    placeholder="Min"
-                    inputMode="numeric"
-                    value={draft.cost_min ?? ""}
-                    onChange={(e) => set("cost_min", Number(e.target.value.replace(/[^\d]/g, "")) || null)}
-                  />
-                  <input
-                    className="rounded-xl border px-3 py-2"
-                    placeholder="Max"
-                    inputMode="numeric"
-                    value={draft.cost_max ?? ""}
-                    onChange={(e) => set("cost_max", Number(e.target.value.replace(/[^\d]/g, "")) || null)}
-                  />
-                </>
-              )}
-            </div>
-            <p className="mt-2 text-xs text-gray-500">{costHelp}</p>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium text-gray-700">Details</label>
-            <textarea
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              rows={5}
-              placeholder="Any context you’d like to share…"
-              value={draft.notes ?? ""}
-              onChange={(e) => set("notes", e.target.value)}
-            />
-          </div>
+      {!loading && total === 0 && (
+        <div className="rounded-2xl border bg-white p-6 text-gray-500">
+          Nothing yet. Share your first project to help neighbours.
         </div>
+      )}
 
-        <div className="mt-5">
-          <button
-            onClick={save}
-            disabled={saving}
-            className="rounded-xl bg-gray-900 px-4 py-2 text-white disabled:opacity-60"
-          >
-            {saving ? "Saving…" : "Share project"}
-          </button>
-        </div>
-      </article>
-
-      {/* Your posts */}
-      <section className="space-y-3">
-        {loading ? (
-          <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
-        ) : items.length === 0 ? (
-          <div className="rounded-2xl border bg-white p-6 text-gray-500">
-            You haven’t shared any projects yet.
-          </div>
-        ) : (
-          items.map((j) => (
-            <a
-              key={j.id}
-              href={`/post/${j.id}`}
-              className="block rounded-2xl border bg-white p-4 hover:border-gray-300"
-            >
-              <div className="font-medium">{j.title || "Untitled"}</div>
-              <div className="mt-1 text-sm text-gray-600">
-                {j.business_name ? `${j.business_name} • ` : ""}
-                {j.suburb}, {j.state} {j.postcode}
+      <div className="grid gap-3">
+        {jobs.map((j) => (
+          <div key={j.id} className="relative rounded-2xl border bg-white p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold">{j.title || "Untitled"}</h3>
+                <div className="mt-1 space-y-1 text-sm text-gray-700">
+                  {j.business_name && <p>{j.business_name}</p>}
+                  <p>
+                    {j.suburb}, {j.state} {j.postcode}
+                  </p>
+                  <p>{costDisplay(j)}</p>
+                </div>
               </div>
-            </a>
-          ))
-        )}
-      </section>
+
+              <div className="relative" data-menu-root>
+                <button
+                  onClick={() => setMenuOpenId((cur) => (cur === j.id ? null : j.id))}
+                  className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpenId === j.id}
+                  aria-label="More actions"
+                  title="More actions"
+                >
+                  ⋯
+                </button>
+                {menuOpenId === j.id && (
+                  <div role="menu" className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg">
+                    <Link
+                      href={`/edit/${j.id}`}
+                      role="menuitem"
+                      onClick={() => setMenuOpenId(null)}
+                      className="block rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      Edit
+                    </Link>
+                    <button
+                      role="menuitem"
+                      onClick={() => handleDelete(j.id)}
+                      className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 text-xs text-gray-500">
+              Posted {timeAgo(j.created_at)}
+              {" • "}
+              <Link href={`/post/${j.id}`} className="underline">
+                View public page
+              </Link>
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   );
+}
+
+function timeAgo(iso: string | null) {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  const diff = Math.max(0, Date.now() - t);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
 }
