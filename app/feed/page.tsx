@@ -1,35 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import JobDetailCard from "@/components/JobDetailCard";
-
-type Job = {
-  id: string;
-  created_at: string | null;
-
-  title: string | null;
-  business_name: string | null;
-
-  suburb: string | null;
-  state: string | null;
-  postcode: string | null;
-
-  recommend: boolean | null;
-
-  // COST FIELDS — canonical names
-  cost_type: "exact" | "range" | "na" | null;
-  cost: string | null; // when cost_type === "exact"
-  cost_min: string | null; // when cost_type === "range"
-  cost_max: string | null; // when cost_type === "range"
-
-  notes: string | null;
-  owner_id: string | null;
-};
+import type { Job } from "@/types"; // ✅ use the shared Job type used by JobDetailCard
 
 // ---------- small utils ----------
-function timeAgo(iso?: string | null) {
+function timeAgo(iso: string) {
   if (!iso) return "";
   const then = new Date(iso).getTime();
   const now = Date.now();
@@ -42,13 +20,11 @@ function timeAgo(iso?: string | null) {
 }
 
 function costDisplay(j: Job) {
-  // exact
-  if (j.cost_type === "exact" && j.cost) {
+  if (j.cost_type === "exact" && j.cost != null) {
     const n = Number(j.cost);
-    return isFinite(n) ? `$${Math.round(n).toLocaleString()}` : `$${j.cost}`;
+    return isFinite(n) ? `$${Math.round(n).toLocaleString()}` : `$${String(j.cost)}`;
   }
-  // range
-  if (j.cost_type === "range" && j.cost_min && j.cost_max) {
+  if (j.cost_type === "range" && j.cost_min != null && j.cost_max != null) {
     const minN = Number(j.cost_min);
     const maxN = Number(j.cost_max);
     const left = isFinite(minN) ? Math.round(minN).toLocaleString() : String(j.cost_min);
@@ -85,7 +61,7 @@ function FeedInner() {
         .select("*")
         .order("created_at", { ascending: false });
       if (!cancelled) {
-        if (!error && data) setJobs(data as Job[]);
+        if (!error && data) setJobs(data as unknown as Job[]);
         setLoading(false);
       }
     })();
@@ -127,8 +103,8 @@ function FeedInner() {
       const okQuery =
         !q ||
         [j.title, j.business_name, j.suburb, j.postcode]
-          .filter(Boolean)
-          .some((v) => String(v).toLowerCase().includes(q));
+          .filter((v): v is string => v != null)
+          .some((v) => v.toLowerCase().includes(q));
       return okRec && okState && okQuery;
     });
   }, [jobs, query, stateFilter, recOnly]);
