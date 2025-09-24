@@ -1,139 +1,256 @@
 // components/Feed.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import JobDetailCard from "@/components/JobDetailCard";
 import type { Job } from "@/types";
 
-const STATES = ["ALL", "VIC", "NSW", "QLD", "SA", "WA", "TAS", "ACT", "NT"] as const;
-type StateFilter = (typeof STATES)[number];
+const STATES = ["VIC", "NSW", "QLD", "SA", "WA", "TAS", "ACT", "NT"] as const;
+type StateCode = (typeof STATES)[number] | "ALL";
 
-export default function Feed() {
+function timeAgo(iso: string) {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  const now = Date.now();
+  const mins = Math.max(1, Math.floor((now - then) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function costDisplay(j: Job) {
+  if (j.cost_type === "exact" && j.cost != null) {
+    const n = Number(j.cost);
+    return isFinite(n) ? `$${Math.round(n).toLocaleString()}` : `$${String(j.cost)}`;
+  }
+  if (j.cost_type === "range" && j.cost_min != null && j.cost_max != null) {
+    const minN = Number(j.cost_min);
+    const maxN = Number(j.cost_max);
+    const left = isFinite(minN) ? Math.round(minN).toLocaleString() : String(j.cost_min);
+    const right = isFinite(maxN) ? Math.round(maxN).toLocaleString() : String(j.cost_max);
+    return `$${left}–$${right}`;
+  }
+  return "Cost not shared";
+}
+
+function FeedInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const search = useSearchParams();
+
+  // URL params -> UI state
+  const [query, setQuery] = useState<string>(search.get("q") ?? "");
+  const [stateFilter, setStateFilter] = useState<StateCode>((search.get("state") as StateCode) || "ALL");
+  const [recOnly, setRecOnly] = useState<boolean>((search.get("rec") ?? "") === "1");
+
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [selected, setSelected] = useState<Job | null>(null);
 
-  // simple UI state
-  const [q, setQ] = useState("");
-  const [stateFilter, setStateFilter] = useState<StateFilter>("ALL");
-
+  // fetch jobs
   useEffect(() => {
-    let ignore = false;
+    let cancelled = false;
     (async () => {
       setLoading(true);
       const { data, error } = await supabase
         .from("jobs")
         .select("*")
         .order("created_at", { ascending: false });
-
-      if (!ignore) {
-        if (error) {
-          console.error(error);
-          setJobs([]);
-        } else {
-          setJobs((data ?? []) as Job[]);
-        }
+      if (!cancelled) {
+        if (!error && data) setJobs(data as Job[]);
         setLoading(false);
       }
     })();
     return () => {
-      ignore = true;
+      cancelled = true;
     };
   }, []);
 
+  // keep URL in sync
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (stateFilter !== "ALL") params.set("state", stateFilter);
+    if (recOnly) params.set("rec", "1");
+    const url = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+    router.replace(url, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, stateFilter, recOnly]);
+
+  // counts by state
+  const counts = useMemo(() => {
+    const base: Record<StateCode, number> = {
+      ALL: jobs.length,
+      VIC: 0, NSW: 0, QLD: 0, SA: 0, WA: 0, TAS: 0, ACT: 0, NT: 0,
+    };
+    for (const j of jobs) {
+      const st = (j.state ?? "") as StateCode;
+      if (st && st in base) base[st] += 1;
+    }
+    return base;
+  }, [jobs]);
+
+  // filtered list (💡 coerce every field to string before .toLowerCase())
   const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
+    const s = query.trim().toLowerCase();
     return jobs.filter((j) => {
+      const okRec = !recOnly || !!j.recommend;
+      const okS = stateFilter === "ALL" || j.state === stateFilter;
       const okQ =
         !s ||
         [j.title, j.suburb, j.business_name, j.postcode].some((v) =>
-          (v ?? "").toLowerCase().includes(s)
+          String(v ?? "").toLowerCase().includes(s)
         );
-      const okS = stateFilter === "ALL" || j.state === stateFilter;
-      return okQ && okS;
+      return okQ && okS && okRec;
     });
-  }, [jobs, q, stateFilter]);
+  }, [jobs, query, stateFilter, recOnly]);
+
+  // auto-select first after filtering
+  useEffect(() => {
+    setSelected((cur) => {
+      if (cur && filtered.some((j) => j.id === cur.id)) return cur;
+      return filtered.length ? filtered[0] : null;
+    });
+  }, [filtered]);
 
   return (
-    <section className="space-y-4">
+    <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
       {/* Filters */}
-      <div className="rounded-2xl border bg-white p-3 md:p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <div className="relative flex-1">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by job, business, suburb or postcode"
-              className="w-full rounded-xl border pl-9 pr-9 py-2"
-            />
-            <svg
-              className="absolute left-3 top-2.5 h-4 w-4 text-gray-500"
-              viewBox="0 0 24 24"
-              aria-hidden
-            >
-              <path
-                d="M21 21l-4.3-4.3m1.1-5.1a6.8 6.8 0 11-13.6 0 6.8 6.8 0 0113.6 0z"
-                stroke="currentColor"
-                strokeWidth="2"
-                fill="none"
-                strokeLinecap="round"
+      <div className="lg:col-span-12 rounded-2xl border bg-white p-3 sm:p-4">
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full rounded-xl border px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
+                placeholder="Search by title, business, suburb or postcode"
               />
-            </svg>
-            {q && (
-              <button
-                type="button"
-                onClick={() => setQ("")}
-                className="absolute right-2 top-1.5 h-7 w-7 grid place-items-center rounded-lg hover:bg-gray-100"
-                aria-label="Clear search"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-gray-500">
-                  <path
-                    d="M6 6l12 12M18 6L6 18"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
-            )}
+              {query && (
+                <button
+                  onClick={() => setQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <label className="hidden sm:flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={recOnly}
+                onChange={(e) => setRecOnly(e.target.checked)}
+              />
+              Recommended only
+            </label>
           </div>
 
-          <select
-            value={stateFilter}
-            onChange={(e) => setStateFilter(e.target.value as StateFilter)}
-            className="w-full sm:w-56 rounded-xl border px-3 py-2 text-sm"
-          >
-            {STATES.map((s) => (
-              <option key={s} value={s}>
-                {s === "ALL" ? "All states" : s}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            {(["ALL", ...STATES] as StateCode[]).map((code) => {
+              const active = stateFilter === code;
+              const count = counts[code] ?? 0;
+              return (
+                <button
+                  key={code}
+                  onClick={() => setStateFilter(code)}
+                  className={[
+                    "rounded-full border px-3 py-1.5 text-sm",
+                    active ? "bg-gray-900 text-white border-gray-900" : "bg-white hover:bg-gray-50",
+                  ].join(" ")}
+                >
+                  {code} ({count})
+                </button>
+              );
+            })}
+            <div className="sm:hidden ml-auto">
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={recOnly}
+                  onChange={(e) => setRecOnly(e.target.checked)}
+                />
+                Recommended only
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* List */}
-      {loading ? (
-        <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border bg-white p-6 text-gray-500">No results.</div>
-      ) : (
-        <div className="grid gap-3">
-          {filtered.map((j) => (
-            <Link
-              key={j.id}
-              href={`/post/${j.id}`}
-              className="rounded-2xl border bg-white p-4 hover:border-gray-300"
-            >
-              <div className="font-medium line-clamp-2">{j.title || "Untitled"}</div>
-              <div className="mt-1 text-sm text-gray-600">
-                {j.business_name ? `${j.business_name} • ` : ""}
-                {j.suburb}, {j.state} {j.postcode}
-              </div>
-            </Link>
-          ))}
+      {/* Left list */}
+      <div className="lg:col-span-5 space-y-3">
+        {loading && (
+          <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
+        )}
+        {!loading && filtered.length === 0 && (
+          <div className="rounded-2xl border bg-white p-6 text-gray-500">
+            No results. Try clearing filters.
+          </div>
+        )}
+        {!loading &&
+          filtered.map((j) => {
+            const isActive = selected?.id === j.id;
+            return (
+              <button
+                key={j.id}
+                onClick={() => setSelected(j)}
+                className={[
+                  "w-full text-left rounded-2xl border bg-white p-4 transition",
+                  isActive ? "ring-2 ring-indigo-300 border-indigo-400" : "hover:shadow-sm",
+                ].join(" ")}
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs text-gray-500">{timeAgo(j.created_at)}</span>
+                  {j.recommend ? (
+                    <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs text-green-700 border border-green-200">
+                      Recommended
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs text-red-700 border border-red-200">
+                      Not recommended
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="truncate text-base font-semibold">{j.title ?? "Untitled"}</h3>
+
+                <div className="mt-2 space-y-1 text-sm text-gray-700">
+                  {j.business_name && <p>{j.business_name}</p>}
+                  <p>
+                    {j.suburb}, {j.state} {j.postcode}
+                  </p>
+                  <p>{costDisplay(j)}</p>
+                </div>
+              </button>
+            );
+          })}
+      </div>
+
+      {/* Right detail */}
+      <div className="lg:col-span-7">
+        <div className="lg:sticky lg:top-24">
+          {selected ? (
+            <JobDetailCard job={selected} />
+          ) : (
+            <div className="rounded-2xl border bg-white p-6 text-gray-500">
+              Select a job on the left to view details.
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </section>
+  );
+}
+
+export default function Feed() {
+  return (
+    <Suspense fallback={<div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>}>
+      <FeedInner />
+    </Suspense>
   );
 }
