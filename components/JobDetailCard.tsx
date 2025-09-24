@@ -1,3 +1,4 @@
+// components/JobDetailCard.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -34,20 +35,20 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     return `${window.location.origin}/post/${job.id}`;
   }, [job?.id]);
 
+  // ✅ Cost display using canonical fields: cost_type, cost, cost_min, cost_max
   const costDisplay = useMemo(() => {
     if (!job) return "Cost not shared";
-    if (job.cost_type === "exact" && job.cost_exact != null)
-      return `$${Math.round(Number(job.cost_exact)).toLocaleString()}`;
-    if (job.cost_type === "range" && job.cost_min != null && job.cost_max != null)
-      return `$${Math.round(Number(job.cost_min)).toLocaleString()}–$${Math.round(
-        Number(job.cost_max)
-      ).toLocaleString()}`;
-    const any = job as Record<string, any>;
-    const legacy = any.cost;
-    if (typeof legacy === "number") return `$${Math.round(legacy).toLocaleString()}`;
-    if (typeof legacy === "string" && legacy.trim() && !Number.isNaN(Number(legacy)))
-      return `$${Math.round(Number(legacy)).toLocaleString()}`;
-    if (typeof any.cost_text === "string" && any.cost_text.trim()) return any.cost_text.trim();
+    if (job.cost_type === "exact" && job.cost != null && String(job.cost).trim() !== "") {
+      const n = Number(job.cost);
+      return isFinite(n) ? `$${Math.round(n).toLocaleString()}` : `$${String(job.cost)}`;
+    }
+    if (job.cost_type === "range" && job.cost_min != null && job.cost_max != null) {
+      const minN = Number(job.cost_min);
+      const maxN = Number(job.cost_max);
+      const left = isFinite(minN) ? Math.round(minN).toLocaleString() : String(job.cost_min);
+      const right = isFinite(maxN) ? Math.round(maxN).toLocaleString() : String(job.cost_max);
+      return `$${left}–$${right}`;
+    }
     return "Cost not shared";
   }, [job]);
 
@@ -65,7 +66,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     if (!confirm("Delete this post? This cannot be undone.")) return;
     const { error } = await supabase.from("jobs").delete().eq("id", job.id).eq("owner_id", currentUserId);
     if (error) {
-      alert("Could not delete. Please try again.");
+      alert(`Could not delete. ${error.message ?? ""}`);
       return;
     }
     window.location.href = "/feed";
@@ -179,7 +180,8 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
 
       <section className="mt-6">
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cost</div>
-        <div className="mt-1 text-base font-semibold">{costDisplay}</div>
+        {/* smaller text to match other fields */}
+        <div className="mt-1 text-base">{costDisplay}</div>
       </section>
 
       {job.notes && (
