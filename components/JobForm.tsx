@@ -1,258 +1,202 @@
 // components/JobForm.tsx
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
-type Props = {
-  initialJob?: Job | null;
-  onSaved?: (j: Job) => void;
-  submitLabel?: string;
+type JobFormProps = {
+  job?: Job; // optional for editing
+  onCreated?: (j: Job) => void; // ✅ added prop type
 };
 
-export default function JobForm({ initialJob = null, onSaved, submitLabel }: Props) {
-  const [saving, setSaving] = useState(false);
-
-  const [title, setTitle] = useState(initialJob?.title ?? "");
-  const [business, setBusiness] = useState(initialJob?.business_name ?? "");
-  const [suburb, setSuburb] = useState(initialJob?.suburb ?? "");
-  const [stateA, setStateA] = useState(initialJob?.state ?? "VIC");
-  const [postcode, setPostcode] = useState(initialJob?.postcode ?? "");
-  const [recommend, setRecommend] = useState<boolean>(initialJob?.recommend ?? true);
-  const [costMode, setCostMode] = useState<"exact"|"range"|"na">(
-    initialJob?.cost_type ?? "na"
-  );
-  const [costExact, setCostExact] = useState<string>(
-    initialJob?.cost_type === "exact" && initialJob?.cost_exact != null
-      ? String(initialJob.cost_exact)
-      : ""
-  );
-  const [costMin, setCostMin] = useState<string>(
-    initialJob?.cost_type === "range" && initialJob?.cost_min != null
-      ? String(initialJob.cost_min)
-      : ""
-  );
-  const [costMax, setCostMax] = useState<string>(
-    initialJob?.cost_type === "range" && initialJob?.cost_max != null
-      ? String(initialJob.cost_max)
-      : ""
-  );
-  const [notes, setNotes] = useState(initialJob?.notes ?? "");
-
-  const canSubmit = useMemo(() => {
-    if (!title.trim()) return false;
-    if (!business.trim()) return false;
-    if (!suburb.trim()) return false;
-    if (!/^\d{4}$/.test(postcode)) return false;
-
-    if (costMode === "exact" && !Number(costExact)) return false;
-    if (costMode === "range" && (!Number(costMin) || !Number(costMax))) return false;
-
-    return true;
-  }, [title, business, suburb, postcode, costMode, costExact, costMin, costMax]);
+export default function JobForm({ job, onCreated }: JobFormProps) {
+  const [title, setTitle] = useState(job?.title ?? "");
+  const [business, setBusiness] = useState(job?.business_name ?? "");
+  const [suburb, setSuburb] = useState(job?.suburb ?? "");
+  const [state, setState] = useState(job?.state ?? "");
+  const [postcode, setPostcode] = useState(job?.postcode ?? "");
+  const [recommend, setRecommend] = useState(job?.recommend ?? false);
+  const [costType, setCostType] = useState<Job["cost_type"]>(job?.cost_type ?? "exact");
+  const [cost, setCost] = useState(job?.cost ? String(job.cost) : "");
+  const [costMin, setCostMin] = useState(job?.cost_min ? String(job.cost_min) : "");
+  const [costMax, setCostMax] = useState(job?.cost_max ? String(job.cost_max) : "");
+  const [details, setDetails] = useState(job?.details ?? "");
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit || saving) return;
+    setLoading(true);
 
-    setSaving(true);
-
-    // build payload with correct cost columns
     const payload: Partial<Job> = {
-      title: title.trim(),
-      business_name: business.trim(),
-      suburb: suburb.trim(),
-      state: stateA,
-      postcode: postcode.trim(),
+      title,
+      business_name: business,
+      suburb,
+      state,
+      postcode,
       recommend,
-      notes: notes.trim() || null,
-      cost_type: costMode,
-      // set all three cost columns explicitly to avoid residue
-      cost_exact: null,
-      cost_min: null,
-      cost_max: null,
+      cost_type: costType,
+      cost: costType === "exact" ? (cost ? Number(cost) : null) : null,
+      cost_min: costType === "range" ? (costMin ? Number(costMin) : null) : null,
+      cost_max: costType === "range" ? (costMax ? Number(costMax) : null) : null,
+      details,
     };
 
-    if (costMode === "exact") {
-      payload.cost_exact = Math.round(Number(costExact));
-    } else if (costMode === "range") {
-      payload.cost_min = Math.round(Number(costMin));
-      payload.cost_max = Math.round(Number(costMax));
+    let data: Job | null = null;
+    let error = null;
+
+    if (job) {
+      // editing
+      const res = await supabase.from("jobs").update(payload).eq("id", job.id).select("*").single();
+      data = res.data as Job | null;
+      error = res.error;
+    } else {
+      // creating
+      const { data: { user } } = await supabase.auth.getUser();
+      payload.owner_id = user?.id ?? null;
+
+      const res = await supabase.from("jobs").insert(payload).select("*").single();
+      data = res.data as Job | null;
+      error = res.error;
     }
 
-    try {
-      // attach owner on create
-      if (!initialJob) {
-        const { data: userRes } = await supabase.auth.getUser();
-        const ownerId = userRes?.user?.id ?? null;
-        (payload as any).owner_id = ownerId;
+    setLoading(false);
 
-        const { data, error } = await supabase
-          .from("jobs")
-          .insert(payload)
-          .select("*")
-          .single();
-
-        if (error || !data) throw error || new Error("Insert failed");
-        onSaved?.(data as Job);
-      } else {
-        // edit
-        const { data, error } = await supabase
-          .from("jobs")
-          .update(payload)
-          .eq("id", initialJob.id)
-          .select("*")
-          .single();
-
-        if (error || !data) throw error || new Error("Update failed");
-        onSaved?.(data as Job);
+    if (error) {
+      alert(error.message);
+    } else if (data) {
+      onCreated?.(data); // ✅ call callback
+      if (!job) {
+        // clear form only if new job
+        setTitle("");
+        setBusiness("");
+        setSuburb("");
+        setState("");
+        setPostcode("");
+        setRecommend(false);
+        setCost("");
+        setCostMin("");
+        setCostMax("");
+        setDetails("");
       }
-    } catch (err: any) {
-      alert(err?.message || "Could not save changes.");
-    } finally {
-      setSaving(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="rounded-2xl border bg-white p-6 space-y-4">
+      <h2 className="text-xl font-semibold">{job ? "Edit Project" : "Share a Project"}</h2>
+
       <div>
-        <label className="block text-sm font-medium mb-1">Title</label>
+        <label className="block text-sm font-medium">Title *</label>
         <input
-          className="w-full rounded-xl border p-3"
-          placeholder="Roof insulation replacement"
+          className="mt-1 w-full rounded-xl border p-2"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          required
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Who did it (business or tradie name)</label>
+        <label className="block text-sm font-medium">Who did it *</label>
         <input
-          className="w-full rounded-xl border p-3"
-          placeholder="Company / Tradie name"
+          className="mt-1 w-full rounded-xl border p-2"
           value={business}
           onChange={(e) => setBusiness(e.target.value)}
+          required
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div>
-          <label className="block text-sm font-medium mb-1">Suburb</label>
+          <label className="block text-sm font-medium">Suburb *</label>
           <input
-            className="w-full rounded-xl border p-3"
-            placeholder="Epping"
+            className="mt-1 w-full rounded-xl border p-2"
             value={suburb}
             onChange={(e) => setSuburb(e.target.value)}
+            required
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">State</label>
-          <select
-            className="w-full rounded-xl border p-3"
-            value={stateA}
-            onChange={(e) => setStateA(e.target.value)}
-          >
-            {["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"].map(s=>(
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+          <label className="block text-sm font-medium">State *</label>
+          <input
+            className="mt-1 w-full rounded-xl border p-2"
+            value={state}
+            onChange={(e) => setState(e.target.value)}
+            required
+          />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Postcode</label>
+          <label className="block text-sm font-medium">Postcode *</label>
           <input
-            className="w-full rounded-xl border p-3"
-            placeholder="3076"
+            className="mt-1 w-full rounded-xl border p-2"
             value={postcode}
             onChange={(e) => setPostcode(e.target.value)}
+            required
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-2">Recommendation</label>
-        <div className="flex items-center gap-6 text-sm">
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={recommend} onChange={()=>setRecommend(true)} /> Recommend
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={!recommend} onChange={()=>setRecommend(false)} /> Not recommend
-          </label>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-2">Cost</label>
-        <div className="flex items-center gap-6 text-sm mb-3">
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={costMode==="exact"} onChange={()=>setCostMode("exact")} /> Exact
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={costMode==="range"} onChange={()=>setCostMode("range")} /> Range
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={costMode==="na"} onChange={()=>setCostMode("na")} /> Prefer not to say
-          </label>
-        </div>
-
-        {costMode === "exact" && (
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500">$</span>
+        <label className="block text-sm font-medium">Cost *</label>
+        <select
+          className="mt-1 w-full rounded-xl border p-2"
+          value={costType}
+          onChange={(e) => setCostType(e.target.value as Job["cost_type"])}
+        >
+          <option value="exact">Exact</option>
+          <option value="range">Range</option>
+          <option value="na">Prefer not to say</option>
+        </select>
+        {costType === "exact" && (
+          <input
+            className="mt-2 w-full rounded-xl border p-2"
+            placeholder="Enter cost"
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+          />
+        )}
+        {costType === "range" && (
+          <div className="mt-2 grid grid-cols-2 gap-2">
             <input
-              className="w-40 rounded-xl border p-3"
-              placeholder="3500"
-              inputMode="numeric"
-              value={costExact}
-              onChange={(e)=>setCostExact(e.target.value)}
+              className="rounded-xl border p-2"
+              placeholder="Min"
+              value={costMin}
+              onChange={(e) => setCostMin(e.target.value)}
+            />
+            <input
+              className="rounded-xl border p-2"
+              placeholder="Max"
+              value={costMax}
+              onChange={(e) => setCostMax(e.target.value)}
             />
           </div>
         )}
-
-        {costMode === "range" && (
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-500">$</span>
-              <input
-                className="w-40 rounded-xl border p-3"
-                placeholder="3000"
-                inputMode="numeric"
-                value={costMin}
-                onChange={(e)=>setCostMin(e.target.value)}
-              />
-            </div>
-            <span className="text-gray-500">to</span>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-500">$</span>
-              <input
-                className="w-40 rounded-xl border p-3"
-                placeholder="4000"
-                inputMode="numeric"
-                value={costMax}
-                onChange={(e)=>setCostMax(e.target.value)}
-              />
-            </div>
-          </div>
-        )}
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Details (optional)</label>
+        <label className="block text-sm font-medium">Details</label>
         <textarea
-          className="w-full rounded-xl border p-3"
-          rows={4}
-          placeholder="Any details that help neighbours know what to expect…"
-          value={notes}
-          onChange={(e)=>setNotes(e.target.value)}
+          className="mt-1 w-full rounded-xl border p-2"
+          value={details}
+          onChange={(e) => setDetails(e.target.value)}
         />
       </div>
 
+      <label className="inline-flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={recommend}
+          onChange={(e) => setRecommend(e.target.checked)}
+        />
+        Recommended
+      </label>
+
       <button
         type="submit"
-        disabled={!canSubmit || saving}
-        className="rounded-xl bg-gray-900 px-4 py-2 text-white disabled:opacity-50"
+        disabled={loading}
+        className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-black disabled:opacity-50"
       >
-        {saving ? "Saving…" : (submitLabel ?? (initialJob ? "Save changes" : "Post job"))}
+        {loading ? "Saving…" : job ? "Save changes" : "Share project"}
       </button>
     </form>
   );
