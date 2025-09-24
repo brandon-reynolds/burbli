@@ -56,9 +56,8 @@ export default function MyPosts() {
   }, []);
 
   async function handleDelete(id: string) {
-    if (!userId) return;
     if (!confirm("Delete this post? This cannot be undone.")) return;
-    const { error } = await supabase.from("jobs").delete().eq("id", id).eq("owner_id", userId);
+    const { error } = await supabase.from("jobs").delete().eq("id", id);
     if (error) {
       alert(`Could not delete. ${error.message ?? ""}`);
       return;
@@ -94,9 +93,7 @@ export default function MyPosts() {
                 <h3 className="text-base font-semibold">{j.title || "Untitled"}</h3>
                 <div className="mt-1 space-y-1 text-sm text-gray-700">
                   {j.business_name && <p>{j.business_name}</p>}
-                  <p>
-                    {j.suburb}, {j.state} {j.postcode}
-                  </p>
+                  <p>{j.suburb}, {j.state} {j.postcode}</p>
                   <p>{costDisplay(j)}</p>
                 </div>
               </div>
@@ -129,6 +126,14 @@ export default function MyPosts() {
                     >
                       Delete
                     </button>
+                    <Link
+                      href={`/post/${j.id}`}
+                      role="menuitem"
+                      onClick={() => setMenuOpenId(null)}
+                      className="mt-1 block rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                    >
+                      View public page
+                    </Link>
                   </div>
                 )}
               </div>
@@ -136,10 +141,6 @@ export default function MyPosts() {
 
             <div className="mt-3 text-xs text-gray-500">
               Posted {timeAgo(j.created_at)}
-              {" • "}
-              <Link href={`/post/${j.id}`} className="underline">
-                View public page
-              </Link>
             </div>
           </div>
         ))}
