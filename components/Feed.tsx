@@ -23,7 +23,7 @@ function timeAgo(iso: string) {
 }
 
 function costDisplay(j: Job) {
-  if (j.cost_type === "exact" && j.cost != null) {
+  if (j.cost_type === "exact" && j.cost != null && String(j.cost).trim() !== "") {
     const n = Number(j.cost);
     return isFinite(n) ? `$${Math.round(n).toLocaleString()}` : `$${String(j.cost)}`;
   }
@@ -42,7 +42,6 @@ function FeedInner() {
   const pathname = usePathname();
   const search = useSearchParams();
 
-  // URL params -> UI state
   const [query, setQuery] = useState<string>(search.get("q") ?? "");
   const [stateFilter, setStateFilter] = useState<StateCode>((search.get("state") as StateCode) || "ALL");
   const [recOnly, setRecOnly] = useState<boolean>((search.get("rec") ?? "") === "1");
@@ -51,7 +50,6 @@ function FeedInner() {
   const [loading, setLoading] = useState<boolean>(true);
   const [selected, setSelected] = useState<Job | null>(null);
 
-  // fetch jobs
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -70,7 +68,6 @@ function FeedInner() {
     };
   }, []);
 
-  // keep URL in sync
   useEffect(() => {
     const params = new URLSearchParams();
     if (query.trim()) params.set("q", query.trim());
@@ -81,7 +78,6 @@ function FeedInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, stateFilter, recOnly]);
 
-  // counts by state
   const counts = useMemo(() => {
     const base: Record<StateCode, number> = {
       ALL: jobs.length,
@@ -94,7 +90,6 @@ function FeedInner() {
     return base;
   }, [jobs]);
 
-  // filtered list (💡 coerce every field to string before .toLowerCase())
   const filtered = useMemo(() => {
     const s = query.trim().toLowerCase();
     return jobs.filter((j) => {
@@ -109,7 +104,6 @@ function FeedInner() {
     });
   }, [jobs, query, stateFilter, recOnly]);
 
-  // auto-select first after filtering
   useEffect(() => {
     setSelected((cur) => {
       if (cur && filtered.some((j) => j.id === cur.id)) return cur;
@@ -182,7 +176,7 @@ function FeedInner() {
         </div>
       </div>
 
-      {/* Left list */}
+      {/* Left list (shows COST before opening) */}
       <div className="lg:col-span-5 space-y-3">
         {loading && (
           <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
@@ -224,6 +218,7 @@ function FeedInner() {
                   <p>
                     {j.suburb}, {j.state} {j.postcode}
                   </p>
+                  {/* ✅ Cost visible on card BEFORE opening */}
                   <p>{costDisplay(j)}</p>
                 </div>
               </button>
