@@ -2,45 +2,61 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import JobForm from "@/components/JobForm";
 import type { Job } from "@/types";
 
-export default function EditJobPage() {
-  const { id } = useParams() as { id: string };
-  const [loading, setLoading] = useState(true);
+export default function EditPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [job, setJob] = useState<Job | null>(null);
-  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!id) return;
+    let ignore = false;
     (async () => {
-      const [{ data: auth }, { data, error }] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase.from("jobs").select("*").eq("id", id).single(),
-      ]);
-      setOwnerId(auth?.user?.id ?? null);
-      if (!error) setJob((data ?? null) as Job | null);
-      setLoading(false);
-    })();
-  }, [id]);
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth?.user) {
+        if (typeof window !== "undefined") window.location.href = "/signin";
+        return;
+      }
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("*")
+        .eq("id", params.id)
+        .single();
 
-  if (!id) return null;
+      if (error || !data) {
+        alert("Could not load job.");
+        router.replace("/myposts");
+        return;
+      }
+
+      if (data.owner_id !== auth.user.id) {
+        alert("You can only edit your own posts.");
+        router.replace("/myposts");
+        return;
+      }
+
+      if (!ignore) {
+        setJob(data as Job);
+        setLoading(false);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [params.id, router]);
+
   if (loading) return null;
 
-  if (!job) {
-    return <div className="rounded-2xl border bg-white p-6">Not found.</div>;
-  }
-
-  if (!ownerId || job.owner_id !== ownerId) {
-    return <div className="rounded-2xl border bg-white p-6">You can only edit your own post.</div>;
-  }
-
   return (
-    <section>
-      <h1 className="mb-4 text-2xl font-semibold">Edit your project</h1>
-      <JobForm mode="update" initial={job} onSaved={() => (window.location.href = "/feed")} />
+    <section className="mx-auto max-w-3xl p-4 md:p-8">
+      <h1 className="text-2xl font-semibold mb-4">Edit project</h1>
+      <JobForm
+        initialJob={job}
+        submitLabel="Save changes"
+        onSaved={(j) => router.push(`/post/${j.id}`)}
+      />
     </section>
   );
 }
