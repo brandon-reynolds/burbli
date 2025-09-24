@@ -50,14 +50,20 @@ export default function FeedPage() {
   }, [q, stateFilter, onlyRecommended, router]);
 
   function costDisplay(j: Job) {
-    if (j.cost_type === "exact" && j.cost_exact != null) {
-      return `$${Math.round(Number(j.cost_exact)).toLocaleString()}`;
+    // ✅ matches your Job type: exact uses `cost`; range uses `cost_min`/`cost_max`
+    if (j.cost_type === "exact" && j.cost != null && String(j.cost).trim() !== "") {
+      const n = Number(j.cost);
+      return isFinite(n) ? `$${Math.round(n).toLocaleString()}` : `$${String(j.cost)}`;
     }
     if (j.cost_type === "range" && j.cost_min != null && j.cost_max != null) {
-      return `$${Math.round(Number(j.cost_min)).toLocaleString()}–$${Math.round(Number(j.cost_max)).toLocaleString()}`;
+      const minN = Number(j.cost_min);
+      const maxN = Number(j.cost_max);
+      const left = isFinite(minN) ? Math.round(minN).toLocaleString() : String(j.cost_min);
+      const right = isFinite(maxN) ? Math.round(maxN).toLocaleString() : String(j.cost_max);
+      return `$${left}–$${right}`;
     }
     return "Cost not shared";
-    }
+  }
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -130,7 +136,7 @@ export default function FeedPage() {
         </div>
       </div>
 
-      {/* left list */}
+      {/* left list (shows COST on card) */}
       <div className="lg:col-span-5 space-y-3">
         {loading ? (
           <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
