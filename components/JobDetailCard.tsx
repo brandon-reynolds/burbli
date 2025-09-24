@@ -35,7 +35,6 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     return `${window.location.origin}/post/${job.id}`;
   }, [job?.id]);
 
-  // ✅ Cost display using canonical fields: cost_type, cost, cost_min, cost_max
   const costDisplay = useMemo(() => {
     if (!job) return "Cost not shared";
     if (job.cost_type === "exact" && job.cost != null && String(job.cost).trim() !== "") {
@@ -87,7 +86,6 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     <article className="rounded-2xl border bg-white p-5 md:p-6">
       <div className="flex items-start justify-between gap-4">
         <span className="text-xs text-gray-500">{timeAgo(job.created_at)}</span>
-
         <div className="flex items-center gap-2" data-detail-menu-root>
           {job.recommend != null && (
             <span
@@ -180,7 +178,6 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
 
       <section className="mt-6">
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cost</div>
-        {/* smaller text to match other fields */}
         <div className="mt-1 text-base">{costDisplay}</div>
       </section>
 
