@@ -17,28 +17,16 @@ export default function EditPage() {
     let ignore = false;
     (async () => {
       const { data: auth } = await supabase.auth.getUser();
-      if (!auth?.user) {
-        if (typeof window !== "undefined") window.location.href = "/signin";
-        return;
-      }
-      const { data, error } = await supabase
-        .from("jobs")
-        .select("*")
-        .eq("id", params.id)
-        .single();
-
+      if (!auth?.user) return (window.location.href = "/signin");
+      const { data, error } = await supabase.from("jobs").select("*").eq("id", params.id).single();
       if (error || !data) {
         alert("Could not load job.");
-        router.replace("/myposts");
-        return;
+        return router.replace("/myposts");
       }
-
       if (data.owner_id !== auth.user.id) {
         alert("You can only edit your own posts.");
-        router.replace("/myposts");
-        return;
+        return router.replace("/myposts");
       }
-
       if (!ignore) {
         setJob(data as Job);
         setLoading(false);
@@ -54,8 +42,8 @@ export default function EditPage() {
       <h1 className="text-2xl font-semibold mb-4">Edit project</h1>
       <JobForm
         initialJob={job}
-        submitLabel="Save changes"
         onSaved={(j) => router.push(`/post/${j.id}`)}
+        submitLabel="Save changes"
       />
     </section>
   );
