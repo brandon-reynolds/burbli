@@ -1,19 +1,50 @@
 // app/myposts/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
+
+function costDisplay(j: Job) {
+  if (j.cost_type === "exact" && j.cost != null && String(j.cost).trim() !== "") {
+    const n = Number(j.cost);
+    return isFinite(n) ? `$${Math.round(n).toLocaleString()}` : `$${String(j.cost)}`;
+  }
+  if (j.cost_type === "range" && j.cost_min != null && j.cost_max != null) {
+    const minN = Number(j.cost_min);
+    const maxN = Number(j.cost_max);
+    const left = isFinite(minN) ? Math.round(minN).toLocaleString() : String(j.cost_min);
+    const right = isFinite(maxN) ? Math.round(maxN).toLocaleString() : String(j.cost_max);
+    return `$${left}–$${right}`;
+  }
+  return "Cost not shared";
+}
+
+function timeAgo(iso: string | null) {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  const diff = Math.max(0, Date.now() - t);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
 
 export default function MyPostsPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [items, setItems] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
-  // Require auth
+  // Require auth + load posts
   useEffect(() => {
     let ignore = false;
+
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -40,19 +71,42 @@ export default function MyPostsPage() {
         setLoading(false);
       }
     })();
-    return () => { ignore = true; };
+
+    const onDocClick = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (!el) return;
+      if (!el.closest("[data-menu-root]")) setMenuOpenId(null);
+    };
+    document.addEventListener("click", onDocClick);
+
+    return () => {
+      ignore = true;
+      document.removeEventListener("click", onDocClick);
+    };
   }, []);
 
+  async function handleDelete(id: string) {
+    if (!userId) return;
+    if (!confirm("Delete this post? This cannot be undone.")) return;
+    const { error } = await supabase.from("jobs").delete().eq("id", id).eq("owner_id", userId);
+    if (error) {
+      alert(`Could not delete. ${error.message ?? ""}`);
+      return;
+    }
+    setItems((prev) => prev.filter((j) => j.id !== id));
+    setMenuOpenId(null);
+  }
+
   if (!userId) return null;
+
+  const total = useMemo(() => items.length, [items]);
 
   return (
     <section className="mx-auto max-w-6xl px-4 md:px-8 py-8 md:py-12 space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">My posts</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Projects you’ve shared on Burbli.
-          </p>
+          <p className="mt-1 text-sm text-gray-600">Projects you’ve shared on Burbli.</p>
         </div>
         <Link
           href="/submit"
@@ -64,7 +118,7 @@ export default function MyPostsPage() {
 
       {loading ? (
         <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
-      ) : items.length === 0 ? (
+      ) : total === 0 ? (
         <div className="rounded-2xl border bg-white p-6">
           <p className="text-gray-700">You haven’t shared any projects yet.</p>
           <Link href="/submit" className="mt-3 inline-block underline">
@@ -74,17 +128,67 @@ export default function MyPostsPage() {
       ) : (
         <div className="grid gap-3">
           {items.map((j) => (
-            <Link
-              key={j.id}
-              href={`/post/${j.id}`}
-              className="rounded-2xl border bg-white p-4 hover:border-gray-300"
-            >
-              <div className="font-medium line-clamp-2">{j.title || "Untitled"}</div>
-              <div className="mt-1 text-sm text-gray-600">
-                {j.business_name ? `${j.business_name} • ` : ""}
-                {j.suburb}, {j.state} {j.postcode}
+            <div key={j.id} className="relative rounded-2xl border bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold">{j.title || "Untitled"}</h3>
+                  <div className="mt-1 space-y-1 text-sm text-gray-700">
+                    {j.business_name && <p>{j.business_name}</p>}
+                    <p>
+                      {j.suburb}, {j.state} {j.postcode}
+                    </p>
+                    <p>{costDisplay(j)}</p>
+                  </div>
+                </div>
+
+                <div className="relative" data-menu-root>
+                  <button
+                    onClick={() => setMenuOpenId((cur) => (cur === j.id ? null : j.id))}
+                    className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpenId === j.id}
+                    aria-label="More actions"
+                    title="More actions"
+                  >
+                    ⋯
+                  </button>
+                  {menuOpenId === j.id && (
+                    <div
+                      role="menu"
+                      className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg"
+                    >
+                      <Link
+                        href={`/edit/${j.id}`}
+                        role="menuitem"
+                        onClick={() => setMenuOpenId(null)}
+                        className="block rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        role="menuitem"
+                        onClick={() => handleDelete(j.id)}
+                        className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                      <Link
+                        href={`/post/${j.id}`}
+                        role="menuitem"
+                        onClick={() => setMenuOpenId(null)}
+                        className="mt-1 block rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                      >
+                        View public page
+                      </Link>
+                    </div>
+                  )}
+                </div>
               </div>
-            </Link>
+
+              <div className="mt-3 text-xs text-gray-500">
+                Posted {timeAgo(j.created_at)}
+              </div>
+            </div>
           ))}
         </div>
       )}
