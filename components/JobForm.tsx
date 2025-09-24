@@ -1,270 +1,235 @@
 // components/JobForm.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useState, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
-type Mode = "create" | "update";
-
 type Props = {
-  mode?: Mode;
-  initial?: Job | null;
-  onCreated?: (j: Job) => void;
+  initialJob?: Job | null;
   onSaved?: (j: Job) => void;
+  submitLabel?: string;
 };
 
-type Draft = {
-  title: string;
-  business_name: string;
-  suburb: string;
-  state: string;
-  postcode: string;
-  recommend: boolean;
-  notes: string;
-
-  costType: "exact" | "range" | "na";
-  cost: string;     // for exact
-  costMin: string;  // for range
-  costMax: string;  // for range
-};
-
-function toDraft(j?: Job | null): Draft {
-  return {
-    title: j?.title ?? "",
-    business_name: j?.business_name ?? "",
-    suburb: j?.suburb ?? "",
-    state: j?.state ?? "VIC",
-    postcode: j?.postcode != null ? String(j.postcode) : "",
-    recommend: j?.recommend ?? true,
-    notes: j?.notes ?? "",
-
-    costType:
-      j?.cost_type === "exact" || j?.cost_type === "range"
-        ? (j.cost_type as "exact" | "range")
-        : "na",
-    cost: j?.cost_type === "exact" && j?.cost ? String(j.cost) : "",
-    costMin: j?.cost_type === "range" && j?.cost_min ? String(j.cost_min) : "",
-    costMax: j?.cost_type === "range" && j?.cost_max ? String(j.cost_max) : "",
-  };
-}
-
-export default function JobForm({ mode = "create", initial = null, onCreated, onSaved }: Props) {
-  const [draft, setDraft] = useState<Draft>(() => toDraft(initial));
+export default function JobForm({ initialJob = null, onSaved, submitLabel }: Props) {
   const [saving, setSaving] = useState(false);
-  const isUpdate = mode === "update" && !!initial?.id;
 
-  useEffect(() => {
-    setDraft(toDraft(initial));
-  }, [initial?.id]);
+  const [title, setTitle] = useState(initialJob?.title ?? "");
+  const [business, setBusiness] = useState(initialJob?.business_name ?? "");
+  const [suburb, setSuburb] = useState(initialJob?.suburb ?? "");
+  const [stateA, setStateA] = useState(initialJob?.state ?? "VIC");
+  const [postcode, setPostcode] = useState(initialJob?.postcode ?? "");
+  const [recommend, setRecommend] = useState<boolean>(initialJob?.recommend ?? true);
+  const [costMode, setCostMode] = useState<"exact"|"range"|"na">(
+    initialJob?.cost_type ?? "na"
+  );
+  const [costExact, setCostExact] = useState<string>(
+    initialJob?.cost_type === "exact" && initialJob?.cost_exact != null
+      ? String(initialJob.cost_exact)
+      : ""
+  );
+  const [costMin, setCostMin] = useState<string>(
+    initialJob?.cost_type === "range" && initialJob?.cost_min != null
+      ? String(initialJob.cost_min)
+      : ""
+  );
+  const [costMax, setCostMax] = useState<string>(
+    initialJob?.cost_type === "range" && initialJob?.cost_max != null
+      ? String(initialJob.cost_max)
+      : ""
+  );
+  const [notes, setNotes] = useState(initialJob?.notes ?? "");
 
-  function set<K extends keyof Draft>(key: K, value: Draft[K]) {
-    setDraft((d) => ({ ...d, [key]: value }));
-  }
+  const canSubmit = useMemo(() => {
+    if (!title.trim()) return false;
+    if (!business.trim()) return false;
+    if (!suburb.trim()) return false;
+    if (!/^\d{4}$/.test(postcode)) return false;
 
-  const disabled = useMemo(() => {
-    const required =
-      draft.title.trim() &&
-      draft.business_name.trim() &&
-      draft.suburb.trim() &&
-      draft.state.trim() &&
-      /^\d{4}$/.test(draft.postcode);
-    if (!required) return true;
+    if (costMode === "exact" && !Number(costExact)) return false;
+    if (costMode === "range" && (!Number(costMin) || !Number(costMax))) return false;
 
-    if (draft.costType === "exact") return !draft.cost.trim();
-    if (draft.costType === "range") return !draft.costMin.trim() || !draft.costMax.trim();
-    return false;
-  }, [draft]);
+    return true;
+  }, [title, business, suburb, postcode, costMode, costExact, costMin, costMax]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (saving || disabled) return;
+    if (!canSubmit || saving) return;
 
     setSaving(true);
+
+    // build payload with correct cost columns
+    const payload: Partial<Job> = {
+      title: title.trim(),
+      business_name: business.trim(),
+      suburb: suburb.trim(),
+      state: stateA,
+      postcode: postcode.trim(),
+      recommend,
+      notes: notes.trim() || null,
+      cost_type: costMode,
+      // set all three cost columns explicitly to avoid residue
+      cost_exact: null,
+      cost_min: null,
+      cost_max: null,
+    };
+
+    if (costMode === "exact") {
+      payload.cost_exact = Math.round(Number(costExact));
+    } else if (costMode === "range") {
+      payload.cost_min = Math.round(Number(costMin));
+      payload.cost_max = Math.round(Number(costMax));
+    }
+
     try {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth?.user?.id ?? null;
+      // attach owner on create
+      if (!initialJob) {
+        const { data: userRes } = await supabase.auth.getUser();
+        const ownerId = userRes?.user?.id ?? null;
+        (payload as any).owner_id = ownerId;
 
-      const base: any = {
-        title: draft.title.trim(),
-        business_name: draft.business_name.trim(),
-        suburb: draft.suburb.trim(),
-        state: draft.state.trim(),
-        postcode: draft.postcode ? parseInt(draft.postcode, 10) : null,
-        recommend: !!draft.recommend,
-        notes: draft.notes.trim() || null,
-      };
-
-      if (draft.costType === "exact") {
-        base.cost_type = "exact";
-        base.cost = draft.cost.trim();
-        base.cost_min = null;
-        base.cost_max = null;
-      } else if (draft.costType === "range") {
-        base.cost_type = "range";
-        base.cost = null;
-        base.cost_min = draft.costMin.trim();
-        base.cost_max = draft.costMax.trim();
-      } else {
-        base.cost_type = "na";
-        base.cost = null;
-        base.cost_min = null;
-        base.cost_max = null;
-      }
-
-      let result: Job | null = null;
-
-      if (isUpdate) {
-        if (!userId) throw new Error("Not signed in.");
         const { data, error } = await supabase
           .from("jobs")
-          .update(base)
-          .eq("id", (initial as Job).id)
-          .eq("owner_id", userId)
+          .insert(payload)
           .select("*")
           .single();
 
-        if (error) throw error;
-        result = data as Job;
-        onSaved?.(result);
+        if (error || !data) throw error || new Error("Insert failed");
+        onSaved?.(data as Job);
       } else {
-        const payload = { ...base, owner_id: userId };
-        const { data, error } = await supabase.from("jobs").insert(payload).select("*").single();
-        if (error) throw error;
-        result = data as Job;
-        onCreated?.(result);
-        onSaved?.(result);
-        setDraft(toDraft(null));
+        // edit
+        const { data, error } = await supabase
+          .from("jobs")
+          .update(payload)
+          .eq("id", initialJob.id)
+          .select("*")
+          .single();
+
+        if (error || !data) throw error || new Error("Update failed");
+        onSaved?.(data as Job);
       }
     } catch (err: any) {
-      alert(`Could not save changes.\n\n${err?.message ?? String(err)}`);
+      alert(err?.message || "Could not save changes.");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-2xl border bg-white p-4 md:p-6 space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-5">
       <div>
-        <label className="block text-sm font-medium">Title</label>
+        <label className="block text-sm font-medium mb-1">Title</label>
         <input
-          className="mt-1 w-full rounded-xl border px-3 py-2"
-          value={draft.title}
-          onChange={(e) => set("title", e.target.value)}
-          placeholder="Toilet replacement"
+          className="w-full rounded-xl border p-3"
+          placeholder="Roof insulation replacement"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium">Who did it (business or tradie name)</label>
+        <label className="block text-sm font-medium mb-1">Who did it (business or tradie name)</label>
         <input
-          className="mt-1 w-full rounded-xl border px-3 py-2"
-          value={draft.business_name}
-          onChange={(e) => set("business_name", e.target.value)}
-          placeholder="Company or tradie"
+          className="w-full rounded-xl border p-3"
+          placeholder="Company / Tradie name"
+          value={business}
+          onChange={(e) => setBusiness(e.target.value)}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
-          <label className="block text-sm font-medium">Suburb</label>
+          <label className="block text-sm font-medium mb-1">Suburb</label>
           <input
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            value={draft.suburb}
-            onChange={(e) => set("suburb", e.target.value)}
+            className="w-full rounded-xl border p-3"
             placeholder="Epping"
+            value={suburb}
+            onChange={(e) => setSuburb(e.target.value)}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium">State</label>
+          <label className="block text-sm font-medium mb-1">State</label>
           <select
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            value={draft.state}
-            onChange={(e) => set("state", e.target.value)}
+            className="w-full rounded-xl border p-3"
+            value={stateA}
+            onChange={(e) => setStateA(e.target.value)}
           >
-            {["VIC", "NSW", "QLD", "SA", "WA", "TAS", "ACT", "NT"].map((s) => (
+            {["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"].map(s=>(
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium">Postcode</label>
+          <label className="block text-sm font-medium mb-1">Postcode</label>
           <input
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            value={draft.postcode}
-            onChange={(e) => set("postcode", e.target.value.replace(/\D/g, "").slice(0, 4))}
+            className="w-full rounded-xl border p-3"
             placeholder="3076"
-            inputMode="numeric"
-            maxLength={4}
+            value={postcode}
+            onChange={(e) => setPostcode(e.target.value)}
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium">Recommendation</label>
-        <div className="mt-1 flex items-center gap-4">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="radio" checked={draft.recommend === true} onChange={() => set("recommend", true)} />
-            Recommend
+        <label className="block text-sm font-medium mb-2">Recommendation</label>
+        <div className="flex items-center gap-6 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="radio" checked={recommend} onChange={()=>setRecommend(true)} /> Recommend
           </label>
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="radio" checked={draft.recommend === false} onChange={() => set("recommend", false)} />
-            Not recommend
+          <label className="flex items-center gap-2">
+            <input type="radio" checked={!recommend} onChange={()=>setRecommend(false)} /> Not recommend
           </label>
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium">Cost</label>
-        <div className="mt-2 flex flex-wrap items-center gap-4">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="radio" checked={draft.costType === "exact"} onChange={() => set("costType", "exact")} />
-            Exact
+        <label className="block text-sm font-medium mb-2">Cost</label>
+        <div className="flex items-center gap-6 text-sm mb-3">
+          <label className="flex items-center gap-2">
+            <input type="radio" checked={costMode==="exact"} onChange={()=>setCostMode("exact")} /> Exact
           </label>
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="radio" checked={draft.costType === "range"} onChange={() => set("costType", "range")} />
-            Range
+          <label className="flex items-center gap-2">
+            <input type="radio" checked={costMode==="range"} onChange={()=>setCostMode("range")} /> Range
           </label>
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="radio" checked={draft.costType === "na"} onChange={() => set("costType", "na")} />
-            Prefer not to say
+          <label className="flex items-center gap-2">
+            <input type="radio" checked={costMode==="na"} onChange={()=>setCostMode("na")} /> Prefer not to say
           </label>
         </div>
 
-        {draft.costType === "exact" && (
-          <div className="mt-2 flex max-w-xs items-center gap-2">
+        {costMode === "exact" && (
+          <div className="flex items-center gap-2">
             <span className="text-gray-500">$</span>
             <input
-              className="w-full rounded-xl border px-3 py-2"
-              value={draft.cost}
-              onChange={(e) => set("cost", e.target.value.replace(/[^\d]/g, ""))}
+              className="w-40 rounded-xl border p-3"
               placeholder="3500"
               inputMode="numeric"
+              value={costExact}
+              onChange={(e)=>setCostExact(e.target.value)}
             />
           </div>
         )}
 
-        {draft.costType === "range" && (
-          <div className="mt-2 flex max-w-md items-center gap-3">
+        {costMode === "range" && (
+          <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="text-gray-500">$</span>
               <input
-                className="w-32 rounded-xl border px-3 py-2"
-                value={draft.costMin}
-                onChange={(e) => set("costMin", e.target.value.replace(/[^\d]/g, ""))}
-                placeholder="min"
+                className="w-40 rounded-xl border p-3"
+                placeholder="3000"
                 inputMode="numeric"
+                value={costMin}
+                onChange={(e)=>setCostMin(e.target.value)}
               />
             </div>
-            <span className="text-gray-500">–</span>
+            <span className="text-gray-500">to</span>
             <div className="flex items-center gap-2">
               <span className="text-gray-500">$</span>
               <input
-                className="w-32 rounded-xl border px-3 py-2"
-                value={draft.costMax}
-                onChange={(e) => set("costMax", e.target.value.replace(/[^\d]/g, ""))}
-                placeholder="max"
+                className="w-40 rounded-xl border p-3"
+                placeholder="4000"
                 inputMode="numeric"
+                value={costMax}
+                onChange={(e)=>setCostMax(e.target.value)}
               />
             </div>
           </div>
@@ -272,25 +237,23 @@ export default function JobForm({ mode = "create", initial = null, onCreated, on
       </div>
 
       <div>
-        <label className="block text-sm font-medium">Details (optional)</label>
+        <label className="block text-sm font-medium mb-1">Details (optional)</label>
         <textarea
-          className="mt-1 w-full rounded-xl border px-3 py-2"
-          rows={5}
-          value={draft.notes}
-          onChange={(e) => set("notes", e.target.value)}
-          placeholder="Any extra context that would help neighbours."
+          className="w-full rounded-xl border p-3"
+          rows={4}
+          placeholder="Any details that help neighbours know what to expect…"
+          value={notes}
+          onChange={(e)=>setNotes(e.target.value)}
         />
       </div>
 
-      <div className="pt-2">
-        <button
-          type="submit"
-          disabled={saving || disabled}
-          className="inline-flex items-center rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-black disabled:opacity-60"
-        >
-          {saving ? "Saving…" : isUpdate ? "Save changes" : "Post job"}
-        </button>
-      </div>
+      <button
+        type="submit"
+        disabled={!canSubmit || saving}
+        className="rounded-xl bg-gray-900 px-4 py-2 text-white disabled:opacity-50"
+      >
+        {saving ? "Saving…" : (submitLabel ?? (initialJob ? "Save changes" : "Post job"))}
+      </button>
     </form>
   );
 }
