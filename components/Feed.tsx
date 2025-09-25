@@ -56,7 +56,7 @@ function FeedInner() {
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
-  const isDesktop = useIsDesktop(1024); // lg breakpoint
+  const isDesktop = useIsDesktop(1024);
 
   const [query, setQuery] = useState<string>(search.get("q") ?? "");
   const [stateFilter, setStateFilter] = useState<StateCode>((search.get("state") as StateCode) || "ALL");
@@ -127,12 +127,14 @@ function FeedInner() {
     });
   }, [filtered]);
 
-  // Navigate or select based on breakpoint
-  function openJob(j: Job) {
+  // Open behaviour: desktop selects in-place; mobile navigates
+  function openJob(j: Job, e?: React.SyntheticEvent) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (isDesktop) {
       setSelected(j);
-      // ensure detail is in view on desktop if needed
-      // (no-op for sticky layout; keeping for completeness)
       return;
     }
     router.push(`/post/${j.id}`);
@@ -205,7 +207,7 @@ function FeedInner() {
       </div>
 
       {/* Left list */}
-      <div className="lg:col-span-5 space-y-3">
+      <div className="lg:col-span-5 space-y-3 relative z-10">
         {loading && (
           <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
         )}
@@ -217,19 +219,16 @@ function FeedInner() {
         {!loading &&
           filtered.map((j) => {
             const isActive = selected?.id === j.id && isDesktop;
+            const href = `/post/${j.id}`;
             return (
-              <button
+              <a
                 key={j.id}
-                type="button"
-                onClick={() => openJob(j)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openJob(j);
-                  }
-                }}
+                href={href}
+                onClick={(e) => openJob(j, e)}
+                onTouchEnd={(e) => openJob(j, e)}
                 className={[
-                  "w-full text-left rounded-2xl border bg-white p-4 transition focus:outline-none",
+                  // super high z-index + explicit pointer events to beat stray overlays
+                  "relative z-[60] block rounded-2xl border bg-white p-4 transition focus:outline-none",
                   isActive ? "ring-2 ring-indigo-300 border-indigo-400" : "hover:shadow-sm",
                 ].join(" ")}
                 style={{ touchAction: "manipulation", pointerEvents: "auto" }}
@@ -257,12 +256,12 @@ function FeedInner() {
                   </p>
                   <p>{costDisplay(j)}</p>
                 </div>
-              </button>
+              </a>
             );
           })}
       </div>
 
-      {/* Right detail (desktop only enhances UX; still rendered on mobile, but card taps route away) */}
+      {/* Right detail */}
       <div className="lg:col-span-7">
         <div className="lg:sticky lg:top-24">
           {selected ? (
