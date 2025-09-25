@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, Suspense } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job as JobT } from "@/types";
@@ -9,6 +10,21 @@ import JobDetailCard from "@/components/JobDetailCard";
 
 type Job = JobT;
 const STATES = ["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"] as const;
+
+function useIsDesktop(breakpointPx = 1024) {
+  const [isDesktop, setIsDesktop] = useState<boolean>(() =>
+    typeof window === "undefined" ? true : window.innerWidth >= breakpointPx
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(`(min-width:${breakpointPx}px)`);
+    const on = () => setIsDesktop(mq.matches);
+    on();
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, [breakpointPx]);
+  return isDesktop;
+}
 
 function timeAgo(iso?: string | null) {
   if (!iso) return "";
@@ -39,6 +55,7 @@ function costDisplay(j: Job) {
 function FeedInner() {
   const router = useRouter();
   const sp = useSearchParams();
+  const isDesktop = useIsDesktop(1024); // lg breakpoint
 
   const [all, setAll] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,11 +104,12 @@ function FeedInner() {
     });
   }, [all, q, stateFilter, onlyRecommended]);
 
-  // auto-select first
+  // auto-select first (desktop only)
   useEffect(() => {
+    if (!isDesktop) return;
     if (!loading && filtered.length && !selected) setSelected(filtered[0]);
     if (!loading && !filtered.length) setSelected(null);
-  }, [loading, filtered, selected]);
+  }, [loading, filtered, selected, isDesktop]);
 
   return (
     <section className="mx-auto max-w-6xl p-4 md:p-8 grid lg:grid-cols-12 gap-6">
@@ -143,7 +161,7 @@ function FeedInner() {
         </div>
       </div>
 
-      {/* Left list (ALWAYS shows cost) */}
+      {/* Left list */}
       <div className="lg:col-span-5 space-y-3">
         {loading ? (
           <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
@@ -151,6 +169,34 @@ function FeedInner() {
           <div className="rounded-2xl border bg-white p-6 text-gray-500">No results.</div>
         ) : (
           filtered.map((j) => {
+            if (!isDesktop) {
+              // MOBILE: simple link card (no active ring)
+              return (
+                <Link
+                  key={j.id}
+                  href={`/post/${j.id}`}
+                  className="block rounded-2xl border bg-white p-4 hover:border-gray-300"
+                  prefetch={false}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs text-gray-500">{timeAgo(j.created_at)}</div>
+                      <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
+                      <div className="mt-1 text-sm text-gray-700">{j.business_name || "—"}</div>
+                      <div className="mt-1 text-sm text-gray-700">{j.suburb}, {j.state} {j.postcode}</div>
+                      <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
+                    </div>
+                    {j.recommend && (
+                      <span className="shrink-0 rounded-full bg-green-100 text-green-800 text-xs px-2 py-1">
+                        Recommended
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              );
+            }
+
+            // DESKTOP: master–detail selects in-place with coloured ring
             const active = selected?.id === j.id;
             return (
               <button
@@ -178,7 +224,7 @@ function FeedInner() {
         )}
       </div>
 
-      {/* Right detail */}
+      {/* Right detail (desktop only) */}
       <div className="hidden lg:block lg:col-span-7">
         <div className="lg:sticky lg:top-24">
           {selected ? (
