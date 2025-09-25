@@ -10,6 +10,21 @@ import type { Job } from "@/types";
 const STATES = ["VIC", "NSW", "QLD", "SA", "WA", "TAS", "ACT", "NT"] as const;
 type StateCode = (typeof STATES)[number] | "ALL";
 
+function useIsDesktop(breakpointPx = 1024) {
+  const [isDesktop, setIsDesktop] = useState<boolean>(() =>
+    typeof window === "undefined" ? true : window.innerWidth >= breakpointPx
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(`(min-width: ${breakpointPx}px)`);
+    const listener = () => setIsDesktop(mq.matches);
+    listener();
+    mq.addEventListener?.("change", listener);
+    return () => mq.removeEventListener?.("change", listener);
+  }, [breakpointPx]);
+  return isDesktop;
+}
+
 function timeAgo(iso: string) {
   if (!iso) return "";
   const then = new Date(iso).getTime();
@@ -41,6 +56,7 @@ function FeedInner() {
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
+  const isDesktop = useIsDesktop(1024); // lg breakpoint
 
   const [query, setQuery] = useState<string>(search.get("q") ?? "");
   const [stateFilter, setStateFilter] = useState<StateCode>((search.get("state") as StateCode) || "ALL");
@@ -111,6 +127,17 @@ function FeedInner() {
     });
   }, [filtered]);
 
+  // Navigate or select based on breakpoint
+  function openJob(j: Job) {
+    if (isDesktop) {
+      setSelected(j);
+      // ensure detail is in view on desktop if needed
+      // (no-op for sticky layout; keeping for completeness)
+      return;
+    }
+    router.push(`/post/${j.id}`);
+  }
+
   return (
     <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
       {/* Filters */}
@@ -151,6 +178,7 @@ function FeedInner() {
               return (
                 <button
                   key={code}
+                  type="button"
                   onClick={() => setStateFilter(code)}
                   className={[
                     "rounded-full border px-3 py-1.5 text-sm",
@@ -176,7 +204,7 @@ function FeedInner() {
         </div>
       </div>
 
-      {/* Left list (shows COST before opening) */}
+      {/* Left list */}
       <div className="lg:col-span-5 space-y-3">
         {loading && (
           <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
@@ -188,15 +216,24 @@ function FeedInner() {
         )}
         {!loading &&
           filtered.map((j) => {
-            const isActive = selected?.id === j.id;
+            const isActive = selected?.id === j.id && isDesktop;
             return (
               <button
                 key={j.id}
-                onClick={() => setSelected(j)}
+                type="button"
+                onClick={() => openJob(j)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openJob(j);
+                  }
+                }}
                 className={[
-                  "w-full text-left rounded-2xl border bg-white p-4 transition",
+                  "w-full text-left rounded-2xl border bg-white p-4 transition focus:outline-none",
                   isActive ? "ring-2 ring-indigo-300 border-indigo-400" : "hover:shadow-sm",
                 ].join(" ")}
+                style={{ touchAction: "manipulation", pointerEvents: "auto" }}
+                aria-label={`Open ${j.title ?? "job"}`}
               >
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-xs text-gray-500">{timeAgo(j.created_at)}</span>
@@ -218,7 +255,6 @@ function FeedInner() {
                   <p>
                     {j.suburb}, {j.state} {j.postcode}
                   </p>
-                  {/* ✅ Cost visible on card BEFORE opening */}
                   <p>{costDisplay(j)}</p>
                 </div>
               </button>
@@ -226,7 +262,7 @@ function FeedInner() {
           })}
       </div>
 
-      {/* Right detail */}
+      {/* Right detail (desktop only enhances UX; still rendered on mobile, but card taps route away) */}
       <div className="lg:col-span-7">
         <div className="lg:sticky lg:top-24">
           {selected ? (
