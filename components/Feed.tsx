@@ -80,9 +80,7 @@ function FeedInner() {
         setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -128,20 +126,12 @@ function FeedInner() {
     });
   }, [filtered]);
 
-  function openJob(j: Job, e?: React.SyntheticEvent) {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    if (isDesktop) {
-      setSelected(j);
-      return;
-    }
-    // hard fallback for stubborn overlays
+  function openJobMobile(id: string) {
+    // hard fallback for stubborn overlays / event swallowing
     try {
-      router.push(`/post/${j.id}`);
+      router.push(`/post/${id}`);
     } catch {
-      window.location.assign(`/post/${j.id}`);
+      window.location.assign(`/post/${id}`);
     }
   }
 
@@ -212,7 +202,7 @@ function FeedInner() {
       </div>
 
       {/* Left list */}
-      <div className="lg:col-span-5 space-y-3 relative z-[200]">
+      <div className="lg:col-span-5 space-y-3 relative z-[1]">
         {loading && (
           <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
         )}
@@ -233,14 +223,20 @@ function FeedInner() {
                   isActive ? "ring-2 ring-indigo-300 border-indigo-400" : "hover:shadow-sm",
                 ].join(" ")}
                 style={{ touchAction: "manipulation" }}
+                // Desktop selects in-place; mobile navigates
+                onClick={() => { if (window.innerWidth < 1024) openJobMobile(j.id); }}
+                onTouchEnd={() => { if (window.innerWidth < 1024) openJobMobile(j.id); }}
               >
-                {/* FULL-CARD CLICK OVERLAY */}
+                {/* FULL-CARD CLICK OVERLAY with MAX z-index */}
                 <Link
                   href={href}
-                  onClick={(e) => openJob(j, e)}
-                  onTouchEnd={(e) => openJob(j, e)}
-                  className="absolute inset-0 z-[1000] cursor-pointer"
                   aria-label={`Open ${j.title ?? "job"}`}
+                  className="absolute inset-0"
+                  style={{
+                    zIndex: 2147483647, // max 32-bit int
+                    pointerEvents: "auto",
+                    cursor: "pointer",
+                  }}
                 />
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-xs text-gray-500">{timeAgo(j.created_at)}</span>
