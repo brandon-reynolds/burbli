@@ -22,16 +22,13 @@ function costDisplay(j: Job) {
 }
 
 export default function MyPosts() {
-  const [userId, setUserId] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       const uid = user?.id ?? null;
-      setUserId(uid);
       if (!uid) {
         window.location.href = "/signin";
         return;
@@ -45,25 +42,18 @@ export default function MyPosts() {
       if (!error) setJobs((data ?? []) as Job[]);
       setLoading(false);
     })();
-
-    const onDocClick = (e: MouseEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (!el) return;
-      if (!el.closest("[data-menu-root]")) setMenuOpenId(null);
-    };
-    document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
   }, []);
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string, e?: React.MouseEvent) {
+    e?.stopPropagation();
+    e?.preventDefault();
     if (!confirm("Delete this post? This cannot be undone.")) return;
     const { error } = await supabase.from("jobs").delete().eq("id", id);
     if (error) {
       alert(`Could not delete. ${error.message ?? ""}`);
       return;
     }
-    setJobs((prev) => prev.filter((j) => j.id !== id));
-    setMenuOpenId(null);
+    setJobs(prev => prev.filter(j => j.id !== id));
   }
 
   const total = useMemo(() => jobs.length, [jobs]);
@@ -87,55 +77,40 @@ export default function MyPosts() {
 
       <div className="grid gap-3">
         {jobs.map((j) => (
-          <div key={j.id} className="relative rounded-2xl border bg-white p-4">
+          <div key={j.id} className="relative rounded-2xl border bg-white p-4 hover:shadow-sm transition">
+            {/* Full-card public link with return path to /myposts */}
+            <Link
+              href={`/post/${j.id}?from=${encodeURIComponent("/myposts")}`}
+              className="absolute inset-0"
+              aria-label={`Open ${j.title ?? "job"}`}
+              prefetch={false}
+            />
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-base font-semibold">{j.title || "Untitled"}</h3>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold truncate">{j.title || "Untitled"}</h3>
                 <div className="mt-1 space-y-1 text-sm text-gray-700">
-                  {j.business_name && <p>{j.business_name}</p>}
-                  <p>{j.suburb}, {j.state} {j.postcode}</p>
-                  <p>{costDisplay(j)}</p>
+                  {j.business_name && <p className="truncate">{j.business_name}</p>}
+                  <p className="truncate">
+                    {j.suburb}, {j.state} {j.postcode}
+                  </p>
+                  <p className="font-medium text-gray-900">{costDisplay(j)}</p>
                 </div>
               </div>
 
-              <div className="relative" data-menu-root>
-                <button
-                  onClick={() => setMenuOpenId((cur) => (cur === j.id ? null : j.id))}
+              {/* Actions sit above the overlay so they remain clickable */}
+              <div className="relative z-10 flex shrink-0 items-center gap-2">
+                <Link
+                  href={`/edit/${j.id}`}
                   className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
-                  aria-haspopup="menu"
-                  aria-expanded={menuOpenId === j.id}
-                  aria-label="More actions"
-                  title="More actions"
                 >
-                  ⋯
+                  Edit
+                </Link>
+                <button
+                  onClick={(e) => handleDelete(j.id, e)}
+                  className="rounded-lg border px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                >
+                  Delete
                 </button>
-                {menuOpenId === j.id && (
-                  <div role="menu" className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg">
-                    <Link
-                      href={`/edit/${j.id}`}
-                      role="menuitem"
-                      onClick={() => setMenuOpenId(null)}
-                      className="block rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
-                    >
-                      Edit
-                    </Link>
-                    <button
-                      role="menuitem"
-                      onClick={() => handleDelete(j.id)}
-                      className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                    <Link
-                      href={`/post/${j.id}`}
-                      role="menuitem"
-                      onClick={() => setMenuOpenId(null)}
-                      className="mt-1 block rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
-                    >
-                      View public page
-                    </Link>
-                  </div>
-                )}
               </div>
             </div>
 
