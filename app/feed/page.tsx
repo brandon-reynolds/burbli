@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job as JobT } from "@/types";
 import JobDetailCard from "@/components/JobDetailCard";
@@ -55,6 +55,7 @@ function costDisplay(j: Job) {
 function FeedInner() {
   const router = useRouter();
   const sp = useSearchParams();
+  const pathname = usePathname();
   const isDesktop = useIsDesktop(1024); // lg breakpoint
 
   const [all, setAll] = useState<Job[]>([]);
@@ -89,6 +90,17 @@ function FeedInner() {
     if (onlyRecommended) params.set("rec", "1");
     router.replace(`/feed${params.toString() ? `?${params}` : ""}`, { scroll: false });
   }, [q, stateFilter, onlyRecommended, router]);
+
+  // Build a stable "from" value representing the current feed + filters
+  const fromValue = useMemo(() => {
+    const params = new URLSearchParams();
+    if (q.trim()) params.set("q", q.trim());
+    if (stateFilter !== "ALL") params.set("state", stateFilter);
+    if (onlyRecommended) params.set("rec", "1");
+    const path = `${pathname}${params.toString() ? `?${params}` : ""}`;
+    // one param; keep it URL-safe
+    return encodeURIComponent(path);
+  }, [q, stateFilter, onlyRecommended, pathname]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -170,11 +182,11 @@ function FeedInner() {
         ) : (
           filtered.map((j) => {
             if (!isDesktop) {
-              // MOBILE: simple link card (no active ring)
+              // MOBILE: link card; append `from` so detail can return to exact filtered feed
               return (
                 <Link
                   key={j.id}
-                  href={`/post/${j.id}`}
+                  href={`/post/${j.id}?from=${fromValue}`}
                   className="block rounded-2xl border bg-white p-4 hover:border-gray-300"
                   prefetch={false}
                 >
