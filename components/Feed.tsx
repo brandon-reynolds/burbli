@@ -1,40 +1,20 @@
 // components/Feed.tsx
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import JobDetailCard from "@/components/JobDetailCard";
 import type { Job } from "@/types";
 
-const STATES = ["VIC", "NSW", "QLD", "SA", "WA", "TAS", "ACT", "NT"] as const;
-type StateCode = (typeof STATES)[number] | "ALL";
-
-function useIsDesktop(breakpointPx = 1024) {
-  const [isDesktop, setIsDesktop] = useState<boolean>(() =>
-    typeof window === "undefined" ? true : window.innerWidth >= breakpointPx
-  );
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia(`(min-width: ${breakpointPx}px)`);
-    const on = () => setIsDesktop(mq.matches);
-    on();
-    mq.addEventListener?.("change", on);
-    return () => mq.removeEventListener?.("change", on);
-  }, [breakpointPx]);
-  return isDesktop;
-}
-
-function timeAgo(iso: string) {
+function timeAgo(iso: string | null) {
   if (!iso) return "";
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  const mins = Math.max(1, Math.floor((now - then) / 60000));
+  const t = new Date(iso).getTime();
+  const diff = Math.max(0, Date.now() - t);
+  const mins = Math.floor(diff / 60000);
   if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
   return `${days}d ago`;
 }
 
@@ -54,303 +34,76 @@ function costDisplay(j: Job) {
 }
 
 function FeedInner() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const search = useSearchParams();
-  const isDesktop = useIsDesktop(1024); // lg breakpoint
-
-  const [query, setQuery] = useState<string>(search.get("q") ?? "");
-  const [stateFilter, setStateFilter] = useState<StateCode>((search.get("state") as StateCode) || "ALL");
-  const [recOnly, setRecOnly] = useState<boolean>((search.get("rec") ?? "") === "1");
-
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [selected, setSelected] = useState<Job | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
+    let ignore = false;
     (async () => {
       setLoading(true);
       const { data, error } = await supabase
         .from("jobs")
-        .select("*")
+        .select("id,title,business_name,suburb,state,postcode,recommend,cost_type,cost,cost_min,cost_max,notes,created_at")
         .order("created_at", { ascending: false });
-      if (!cancelled) {
-        if (!error && data) setJobs(data as Job[]);
+      if (!ignore) {
+        if (error) {
+          console.error(error.message);
+          setJobs([]);
+        } else {
+          setJobs((data as Job[]) ?? []);
+        }
         setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { ignore = true; };
   }, []);
 
-  // keep URL in sync with filters
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (query.trim()) params.set("q", query.trim());
-    if (stateFilter !== "ALL") params.set("state", stateFilter);
-    if (recOnly) params.set("rec", "1");
-    const url = params.toString() ? `${pathname}?${params.toString()}` : pathname;
-    router.replace(url, { scroll: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, stateFilter, recOnly]);
+  const emptyText = useMemo(() => {
+    if (loading) return "Loading…";
+    return "No posts yet. Be the first to share!";
+  }, [loading]);
 
-  const counts = useMemo(() => {
-    const base: Record<StateCode, number> = {
-      ALL: jobs.length,
-      VIC: 0, NSW: 0, QLD: 0, SA: 0, WA: 0, TAS: 0, ACT: 0, NT: 0,
-    };
-    for (const j of jobs) {
-      const st = (j.state ?? "") as StateCode;
-      if (st && st in base) base[st] += 1;
-    }
-    return base;
-  }, [jobs]);
-
-  const filtered = useMemo(() => {
-    const s = query.trim().toLowerCase();
-    return jobs.filter((j) => {
-      const okRec = !recOnly || !!j.recommend;
-      const okS = stateFilter === "ALL" || j.state === stateFilter;
-      const okQ =
-        !s ||
-        [j.title, j.suburb, j.business_name, j.postcode].some((v) =>
-          String(v ?? "").toLowerCase().includes(s)
-        );
-      return okQ && okS && okRec;
-    });
-  }, [jobs, query, stateFilter, recOnly]);
-
-  // ensure a selected item on desktop
-  useEffect(() => {
-    if (!isDesktop) return; // mobile won’t use selection
-    setSelected((cur) => {
-      if (cur && filtered.some((j) => j.id === cur.id)) return cur;
-      return filtered.length ? filtered[0] : null;
-    });
-  }, [filtered, isDesktop]);
-
-  // ---------- MOBILE RENDER (simple list; tap navigates) ----------
-  if (!isDesktop) {
-    return (
-      <section className="space-y-6">
-        {/* Filters */}
-        <div className="rounded-2xl border bg-white p-3 sm:p-4">
-          <div className="flex flex-col gap-3 sm:gap-4">
-            <div className="flex items-center gap-3">
-              <div className="relative flex-1">
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="w-full rounded-xl border px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
-                  placeholder="Search by title, business, suburb or postcode"
-                />
-                {query && (
-                  <button
-                    onClick={() => setQuery("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4"
-                  checked={recOnly}
-                  onChange={(e) => setRecOnly(e.target.checked)}
-                />
-                Recommended only
-              </label>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {(["ALL", ...STATES] as StateCode[]).map((code) => {
-                const active = stateFilter === code;
-                const count = counts[code] ?? 0;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => setStateFilter(code)}
-                    className={[
-                      "rounded-full border px-3 py-1.5 text-sm",
-                      active ? "bg-gray-900 text-white border-gray-900" : "bg-white hover:bg-gray-50",
-                    ].join(" ")}
-                  >
-                    {code} ({count})
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* List */}
-        <div className="space-y-3">
-          {loading && (
-            <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
-          )}
-          {!loading && filtered.length === 0 && (
-            <div className="rounded-2xl border bg-white p-6 text-gray-500">
-              No results. Try clearing filters.
-            </div>
-          )}
-          {!loading &&
-            filtered.map((j) => (
-              <Link
-                key={j.id}
-                href={`/post/${j.id}`}
-                className="block rounded-2xl border bg-white p-4 transition hover:shadow-sm"
-              >
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">{timeAgo(j.created_at)}</span>
-                  {j.recommend ? (
-                    <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs text-green-700 border border-green-200">
-                      Recommended
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs text-red-700 border border-red-200">
-                      Not recommended
-                    </span>
-                  )}
-                </div>
-                <h3 className="truncate text-base font-semibold">{j.title ?? "Untitled"}</h3>
-                <div className="mt-2 space-y-1 text-sm text-gray-700">
-                  {j.business_name && <p>{j.business_name}</p>}
-                  <p>
-                    {j.suburb}, {j.state} {j.postcode}
-                  </p>
-                  <p>{costDisplay(j)}</p>
-                </div>
-              </Link>
-            ))}
-        </div>
-      </section>
-    );
-  }
-
-  // ---------- DESKTOP RENDER (master–detail) ----------
   return (
-    <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-      {/* Filters */}
-      <div className="lg:col-span-12 rounded-2xl border bg-white p-3 sm:p-4">
-        <div className="flex flex-col gap-3 sm:gap-4">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full rounded-xl border px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
-                placeholder="Search by title, business, suburb or postcode"
-              />
-              {query && (
-                <button
-                  onClick={() => setQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-                >
-                  Clear
-                </button>
+    <section className="space-y-3">
+      {jobs.length === 0 ? (
+        <div className="rounded-2xl border bg-white p-6 text-gray-600">{emptyText}</div>
+      ) : (
+        jobs.map((j) => (
+          <Link
+            key={j.id}
+            href={`/post/${j.id}`}
+            prefetch={false}
+            className="block rounded-2xl border border-gray-200 bg-white p-4 shadow-sm hover:border-gray-300 hover:shadow-md transition"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs text-gray-500">{timeAgo(j.created_at)}</span>
+              {j.recommend != null && (
+                j.recommend ? (
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-700 border border-emerald-200">
+                    Recommended
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs text-red-700 border border-red-200">
+                    Not recommended
+                  </span>
+                )
               )}
             </div>
-            <label className="hidden sm:flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={recOnly}
-                onChange={(e) => setRecOnly(e.target.checked)}
-              />
-              Recommended only
-            </label>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {(["ALL", ...STATES] as StateCode[]).map((code) => {
-              const active = stateFilter === code;
-              const count = counts[code] ?? 0;
-              return (
-                <button
-                  key={code}
-                  type="button"
-                  onClick={() => setStateFilter(code)}
-                  className={[
-                    "rounded-full border px-3 py-1.5 text-sm",
-                    active ? "bg-gray-900 text-white border-gray-900" : "bg-white hover:bg-gray-50",
-                  ].join(" ")}
-                >
-                  {code} ({count})
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+            <h3 className="truncate text-base font-semibold text-gray-900">{j.title || "Untitled job"}</h3>
+            <p className="truncate text-sm text-gray-700">{j.business_name || "Unknown business"}</p>
+            <p className="text-xs text-gray-500">
+              {[j.suburb, j.state, j.postcode].filter(Boolean).join(", ")}
+            </p>
 
-      {/* Left list (desktop) */}
-      <div className="lg:col-span-5 space-y-3">
-        {loading && (
-          <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
-        )}
-        {!loading && filtered.length === 0 && (
-          <div className="rounded-2xl border bg-white p-6 text-gray-500">
-            No results. Try clearing filters.
-          </div>
-        )}
-        {!loading &&
-          filtered.map((j) => {
-            const isActive = selected?.id === j.id; // coloured border only on desktop
-            return (
-              <button
-                key={j.id}
-                type="button"
-                onClick={() => setSelected(j)}
-                className={[
-                  "w-full text-left rounded-2xl border bg-white p-4 transition focus:outline-none",
-                  isActive ? "ring-2 ring-indigo-300 border-indigo-400" : "hover:shadow-sm",
-                ].join(" ")}
-                aria-label={`Open ${j.title ?? "job"}`}
-              >
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">{timeAgo(j.created_at)}</span>
-                  {j.recommend ? (
-                    <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs text-green-700 border border-green-200">
-                      Recommended
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs text-red-700 border border-red-200">
-                      Not recommended
-                    </span>
-                  )}
-                </div>
+            <div className="mt-2 text-sm text-gray-900 font-semibold">{costDisplay(j)}</div>
 
-                <h3 className="truncate text-base font-semibold">{j.title ?? "Untitled"}</h3>
-
-                <div className="mt-2 space-y-1 text-sm text-gray-700">
-                  {j.business_name && <p>{j.business_name}</p>}
-                  <p>
-                    {j.suburb}, {j.state} {j.postcode}
-                  </p>
-                  <p>{costDisplay(j)}</p>
-                </div>
-              </button>
-            );
-          })}
-      </div>
-
-      {/* Right detail (desktop only) */}
-      <div className="lg:col-span-7">
-        <div className="lg:sticky lg:top-24">
-          {selected ? (
-            <JobDetailCard job={selected} />
-          ) : (
-            <div className="rounded-2xl border bg-white p-6 text-gray-500">
-              Select a job on the left to view details.
-            </div>
-          )}
-        </div>
-      </div>
+            {j.notes ? (
+              <p className="mt-2 line-clamp-2 text-sm text-gray-600">{j.notes}</p>
+            ) : null}
+          </Link>
+        ))
+      )}
     </section>
   );
 }
