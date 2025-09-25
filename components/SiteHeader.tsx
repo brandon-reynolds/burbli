@@ -1,88 +1,111 @@
 // components/SiteHeader.tsx
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import NavAuth from "@/components/NavAuth";
+import NavAuth from "./NavAuth";
 
 export default function SiteHeader() {
-  const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  const isActive = (href: string) =>
-    pathname === href ? "bg-gray-900 text-white" : "hover:bg-gray-100";
-
-  // close mobile sheet on back/forward
+  // Close nav on route change and on Escape
   useEffect(() => {
-    const onPop = () => setOpen(false);
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const closeMenu = () => setOpen(false);
+  // Prevent background scroll only while open
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    return () => { document.documentElement.style.overflow = prev; };
+  }, [open]);
 
   return (
-    <header className="border-b bg-white/90 backdrop-blur sticky top-0 z-10">
-      <div className="mx-auto max-w-6xl flex items-center justify-between p-4 md:p-6">
-        {/* Brand -> home */}
-        <Link href="/" className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">
-            BR
+    <header className="sticky top-0 z-40 w-full border-b bg-white/80 backdrop-blur">
+      <div className="mx-auto max-w-5xl px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
+                BR
+              </div>
+              <span className="hidden sm:inline text-base font-semibold tracking-tight">Burbli</span>
+            </Link>
           </div>
-          <div className="font-semibold text-lg">Burbli</div>
-        </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-2">
-          <Link href="/" className={`px-3 py-2 rounded-xl text-sm ${isActive("/")}`}>
-            Home
-          </Link>
-          <Link href="/feed" className={`px-3 py-2 rounded-xl text-sm ${isActive("/feed")}`}>
-            Browse jobs
-          </Link>
-          <Link href="/submit" className={`px-3 py-2 rounded-xl text-sm ${isActive("/submit")}`}>
-            Share project
-          </Link>
-          <NavAuth />
-        </nav>
-
-        {/* Mobile burger */}
-        <button
-          onClick={() => setOpen(v => !v)}
-          aria-expanded={open}
-          aria-controls="mobile-nav"
-          className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl hover:bg-gray-100"
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5 text-gray-900" aria-hidden>
-            {open ? (
-              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            ) : (
-              <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            )}
-          </svg>
-          <span className="sr-only">Menu</span>
-        </button>
-      </div>
-
-      {/* Mobile panel */}
-      {open && (
-        <div id="mobile-nav" className="md:hidden border-t bg-white">
-          <div className="mx-auto max-w-6xl p-2">
-            <Link href="/" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/")}`}>
-              Home
-            </Link>
-            <Link href="/feed" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/feed")}`}>
-              Browse jobs
-            </Link>
-            <Link href="/submit" onClick={closeMenu} className={`block px-3 py-3 rounded-xl text-sm ${isActive("/submit")}`}>
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-3 sm:flex">
+            <Link
+              href="/submit"
+              className="rounded-xl bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-black"
+            >
               Share project
             </Link>
-            <div className="mt-1 border-t pt-2">
-              <NavAuth onAction={closeMenu} />
-            </div>
-          </div>
+            <Link
+              href="/myposts"
+              className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+            >
+              My posts
+            </Link>
+            <NavAuth />
+          </nav>
+
+          {/* Mobile menu button */}
+          <button
+            className="sm:hidden rounded-lg border px-3 py-2 text-sm"
+            aria-label="Open menu"
+            aria-expanded={open}
+            onClick={() => setOpen(true)}
+          >
+            Menu
+          </button>
         </div>
+      </div>
+
+      {/* Mobile drawer – only mounts when open */}
+      {open && (
+        <>
+          {/* Backdrop */}
+          <button
+            aria-label="Close menu"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-40 bg-black/30"
+          />
+          {/* Panel */}
+          <div className="fixed inset-y-0 right-0 z-50 w-80 max-w-[85%] bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <span className="text-base font-semibold">Menu</span>
+              <button
+                className="rounded-lg border px-2 py-1 text-sm"
+                onClick={() => setOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <nav className="flex flex-col gap-2 p-4">
+              <Link
+                href="/submit"
+                className="rounded-xl bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-black"
+                onClick={() => setOpen(false)}
+              >
+                Share project
+              </Link>
+              <Link
+                href="/myposts"
+                className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+                onClick={() => setOpen(false)}
+              >
+                My posts
+              </Link>
+              <div className="pt-2">
+                <NavAuth />
+              </div>
+            </nav>
+          </div>
+        </>
       )}
     </header>
   );
