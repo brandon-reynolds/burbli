@@ -73,15 +73,21 @@ export default function MyPosts() {
   const total = useMemo(() => jobs.length, [jobs]);
 
   return (
-    <section className="space-y-4">
+    // Constrain header + list to the same width as cards so alignment matches
+    <section className="mx-auto max-w-3xl space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">My posts</h1>
-        <Link href="/submit" className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-black">
+        <Link
+          href="/submit"
+          className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-black"
+        >
           Share a project
         </Link>
       </div>
 
-      {loading && <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>}
+      {loading && (
+        <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
+      )}
 
       {!loading && total === 0 && (
         <div className="rounded-2xl border bg-white p-6 text-gray-500">
@@ -89,10 +95,13 @@ export default function MyPosts() {
         </div>
       )}
 
-      <div className="grid gap-3 max-w-3xl">
+      <div className="grid gap-3">
         {jobs.map((j) => (
-          <div key={j.id} className="relative rounded-2xl border bg-white p-4 hover:shadow-sm transition overflow-hidden">
-            {/* Full-card public link with return path to /myposts */}
+          <div
+            key={j.id}
+            className="relative overflow-hidden rounded-2xl border bg-white p-4 transition hover:shadow-sm"
+          >
+            {/* Full-card public link with return path to /myposts (under actions) */}
             <Link
               href={`/post/${j.id}?from=${encodeURIComponent("/myposts")}`}
               className="absolute inset-0 z-0"
@@ -108,7 +117,9 @@ export default function MyPosts() {
                 </h3>
                 <div className="mt-1 space-y-1 text-sm text-gray-700">
                   {j.business_name && <p className="truncate">{j.business_name}</p>}
-                  <p className="truncate">{j.suburb}, {j.state} {j.postcode}</p>
+                  <p className="truncate">
+                    {j.suburb}, {j.state} {j.postcode}
+                  </p>
                   <p className="font-medium text-gray-900">{costDisplay(j)}</p>
                 </div>
               </div>
