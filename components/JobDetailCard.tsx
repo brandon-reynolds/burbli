@@ -3,79 +3,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
-function formatAUD(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  const n = Number(value);
-  if (!isFinite(n)) return null;
-  try {
-    return new Intl.NumberFormat("en-AU", {
-      style: "currency",
-      currency: "AUD",
-      maximumFractionDigits: 0,
-    }).format(n);
-  } catch {
-    return `A$${Math.round(n).toLocaleString("en-AU")}`;
-  }
-}
-
-function buildCostLabel(job: Job | null): string {
-  if (!job) return "Cost not shared";
-
-  const exact = formatAUD(job.cost);
-  const minS = formatAUD(job.cost_min);
-  const maxS = formatAUD(job.cost_max);
-  const type = job.cost_type as "exact" | "range" | "from" | null;
-
-  switch (type) {
-    case "exact":
-      if (exact) return `${exact}`;
-      if (minS && maxS) return `${minS}–${maxS}`;
-      if (minS) return `From ${minS}`;
-      if (maxS) return `Up to ${maxS}`;
-      return "Cost not shared";
-
-    case "range":
-      if (minS && maxS) return `${minS}–${maxS}`;
-      if (minS) return `From ${minS}`;
-      if (maxS) return `Up to ${maxS}`;
-      if (exact) return `${exact}`;
-      return "Cost not shared";
-
-    case "from":
-      if (exact) return `From ${exact}`;
-      if (minS) return `From ${minS}`;
-      if (minS && maxS) return `${minS}–${maxS}`;
-      if (maxS) return `Up to ${maxS}`;
-      return "Cost not shared";
-
-    default:
-      if (exact) return `${exact}`;
-      if (minS && maxS) return `${minS}–${maxS}`;
-      if (minS) return `From ${minS}`;
-      if (maxS) return `Up to ${maxS}`;
-      return "Cost not shared";
-  }
-}
-
 export default function JobDetailCard({ job }: { job: Job | null }) {
+  const router = useRouter();
+  const search = useSearchParams();
+
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const fromParam = search.get("from"); // e.g. "/feed?q=...&state=...&rec=1"
+
   useEffect(() => {
     let ignore = false;
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!ignore) setCurrentUserId(user?.id ?? null);
     })();
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, []);
 
   useEffect(() => {
@@ -93,7 +41,21 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     return `${window.location.origin}/post/${job.id}`;
   }, [job?.id]);
 
-  const costDisplay = useMemo(() => buildCostLabel(job), [job?.cost, job?.cost_min, job?.cost_max, job?.cost_type]);
+  const costDisplay = useMemo(() => {
+    if (!job) return "Cost not shared";
+    if (job.cost_type === "exact" && job.cost != null && String(job.cost).trim() !== "") {
+      const n = Number(job.cost);
+      return isFinite(n) ? `$${Math.round(n).toLocaleString()}` : `$${String(job.cost)}`;
+    }
+    if (job.cost_type === "range" && job.cost_min != null && job.cost_max != null) {
+      const minN = Number(job.cost_min);
+      const maxN = Number(job.cost_max);
+      const left = isFinite(minN) ? Math.round(minN).toLocaleString() : String(job.cost_min);
+      const right = isFinite(maxN) ? Math.round(maxN).toLocaleString() : String(job.cost_max);
+      return `$${left}–$${right}`;
+    }
+    return "Cost not shared";
+  }, [job]);
 
   async function copyLink() {
     if (!shareUrl) return;
@@ -107,11 +69,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
   async function deleteHere() {
     if (!job?.id || !currentUserId) return;
     if (!confirm("Delete this post? This cannot be undone.")) return;
-    const { error } = await supabase
-      .from("jobs")
-      .delete()
-      .eq("id", job.id)
-      .eq("owner_id", currentUserId);
+    const { error } = await supabase.from("jobs").delete().eq("id", job.id).eq("owner_id", currentUserId);
     if (error) {
       alert(`Could not delete. ${error.message ?? ""}`);
       return;
@@ -124,6 +82,35 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     setMenuOpen(false);
   }
 
+  function timeAgo(iso: string | null) {
+    if (!iso) return "";
+    const t = new Date(iso).getTime();
+    const diff = Math.max(0, Date.now() - t);
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return `${days}d ago`;
+    const months = Math.floor(days / 30);
+    return `${months}mo ago`;
+  }
+
+  // Mobile-only "Back to feed" behavior
+  const backHref = fromParam && fromParam.startsWith("/")
+    ? fromParam
+    : "/feed";
+
+  function goBack() {
+    const hasHistory = typeof window !== "undefined" && window.history.length > 1;
+    const sameOrigin = typeof document !== "undefined" && document.referrer && document.referrer.startsWith(window.location.origin);
+    if (hasHistory && sameOrigin) {
+      router.back();
+    } else {
+      router.push(backHref);
+    }
+  }
+
   if (!job) {
     return <div className="rounded-2xl border bg-white p-6 text-gray-500">Select a job to view details.</div>;
   }
@@ -132,6 +119,18 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
 
   return (
     <article className="rounded-2xl border bg-white p-5 md:p-6">
+      {/* Mobile-only back to feed (preserves filters) */}
+      <div className="mb-2 lg:hidden">
+        <button
+          onClick={goBack}
+          className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50"
+          aria-label="Back to feed"
+          title="Back to feed"
+        >
+          ← Back to feed
+        </button>
+      </div>
+
       <div className="flex items-start justify-between gap-4">
         <span className="text-xs text-gray-500">{timeAgo(job.created_at)}</span>
         <div className="flex items-center gap-2" data-detail-menu-root>
@@ -192,7 +191,9 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
         </div>
       </div>
 
-      <h2 className="mt-3 text-2xl font-semibold tracking-tight text-gray-900">{job.title || "Untitled job"}</h2>
+      <h2 className="mt-3 text-2xl font-semibold tracking-tight text-gray-900">
+        {job.title || "Untitled job"}
+      </h2>
 
       <section className="mt-6">
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Who did it</div>
@@ -247,25 +248,14 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
           >
             Share your project
           </Link>
-          <button onClick={copyLink} className="inline-flex items-center rounded-xl border px-4 py-2 text-sm hover:bg-gray-50">
+          <button
+            onClick={copyLink}
+            className="inline-flex items-center rounded-xl border px-4 py-2 text-sm hover:bg-gray-50"
+          >
             {copied ? "Copied" : "Copy link"}
           </button>
         </div>
       </div>
     </article>
   );
-}
-
-function timeAgo(iso: string | null) {
-  if (!iso) return "";
-  const t = new Date(iso).getTime();
-  const diff = Math.max(0, Date.now() - t);
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
 }
