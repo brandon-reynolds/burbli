@@ -2,6 +2,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import JobDetailCard from "@/components/JobDetailCard";
@@ -56,7 +57,7 @@ function FeedInner() {
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
-  const isDesktop = useIsDesktop(1024);
+  const isDesktop = useIsDesktop(1024); // lg
 
   const [query, setQuery] = useState<string>(search.get("q") ?? "");
   const [stateFilter, setStateFilter] = useState<StateCode>((search.get("state") as StateCode) || "ALL");
@@ -127,7 +128,6 @@ function FeedInner() {
     });
   }, [filtered]);
 
-  // Open behaviour: desktop selects in-place; mobile navigates
   function openJob(j: Job, e?: React.SyntheticEvent) {
     if (e) {
       e.preventDefault();
@@ -137,11 +137,16 @@ function FeedInner() {
       setSelected(j);
       return;
     }
-    router.push(`/post/${j.id}`);
+    // hard fallback for stubborn overlays
+    try {
+      router.push(`/post/${j.id}`);
+    } catch {
+      window.location.assign(`/post/${j.id}`);
+    }
   }
 
   return (
-    <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+    <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 isolate">
       {/* Filters */}
       <div className="lg:col-span-12 rounded-2xl border bg-white p-3 sm:p-4">
         <div className="flex flex-col gap-3 sm:gap-4">
@@ -207,7 +212,7 @@ function FeedInner() {
       </div>
 
       {/* Left list */}
-      <div className="lg:col-span-5 space-y-3 relative z-10">
+      <div className="lg:col-span-5 space-y-3 relative z-[200]">
         {loading && (
           <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
         )}
@@ -221,19 +226,22 @@ function FeedInner() {
             const isActive = selected?.id === j.id && isDesktop;
             const href = `/post/${j.id}`;
             return (
-              <a
+              <div
                 key={j.id}
-                href={href}
-                onClick={(e) => openJob(j, e)}
-                onTouchEnd={(e) => openJob(j, e)}
                 className={[
-                  // super high z-index + explicit pointer events to beat stray overlays
-                  "relative z-[60] block rounded-2xl border bg-white p-4 transition focus:outline-none",
+                  "relative rounded-2xl border bg-white p-4 transition",
                   isActive ? "ring-2 ring-indigo-300 border-indigo-400" : "hover:shadow-sm",
                 ].join(" ")}
-                style={{ touchAction: "manipulation", pointerEvents: "auto" }}
-                aria-label={`Open ${j.title ?? "job"}`}
+                style={{ touchAction: "manipulation" }}
               >
+                {/* FULL-CARD CLICK OVERLAY */}
+                <Link
+                  href={href}
+                  onClick={(e) => openJob(j, e)}
+                  onTouchEnd={(e) => openJob(j, e)}
+                  className="absolute inset-0 z-[1000] cursor-pointer"
+                  aria-label={`Open ${j.title ?? "job"}`}
+                />
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-xs text-gray-500">{timeAgo(j.created_at)}</span>
                   {j.recommend ? (
@@ -256,7 +264,7 @@ function FeedInner() {
                   </p>
                   <p>{costDisplay(j)}</p>
                 </div>
-              </a>
+              </div>
             );
           })}
       </div>
