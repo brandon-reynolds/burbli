@@ -259,7 +259,7 @@ function FeedInner() {
                           {[j.suburb, j.state, j.postcode].filter(Boolean).join(", ")}
                         </IconRow>
                         {completedLabel && (
-                          <IconRow icon={<Icon.Calendar className="h-4 w-4" />} title="Completed" className="text-xs">
+                          <IconRow icon={<Icon.Calendar className="h-4 w-4" />} title="Completed">
                             <span className="text-gray-600">Completed {completedLabel}</span>
                           </IconRow>
                         )}
@@ -302,7 +302,7 @@ function FeedInner() {
                         {[j.suburb, j.state, j.postcode].filter(Boolean).join(", ")}
                       </IconRow>
                       {completedLabel && (
-                        <IconRow icon={<Icon.Calendar className="h-4 w-4" />} title="Completed" className="text-xs">
+                        <IconRow icon={<Icon.Calendar className="h-4 w-4" />} title="Completed">
                           <span className="text-gray-600">Completed {completedLabel}</span>
                         </IconRow>
                       )}
