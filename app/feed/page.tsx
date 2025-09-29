@@ -7,7 +7,6 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job as JobT } from "@/types";
 import JobDetailCard from "@/components/JobDetailCard";
-import { Building2, MapPin, Calendar, DollarSign } from "lucide-react";
 
 type Job = JobT;
 const STATES = ["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"] as const;
@@ -59,6 +58,32 @@ function costDisplay(j: Job) {
   }
   return "Cost not shared";
 }
+
+/** Inline SVG icons (no external deps) */
+const Icon = {
+  Building: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M3 21h18M6 21V7a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v14M6 10h5M6 14h5M6 18h5M15 10h3M15 14h3M15 18h3" />
+    </svg>
+  ),
+  MapPin: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M12 21s-7-5.33-7-11a7 7 0 1 1 14 0c0 5.67-7 11-7 11Z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  ),
+  Calendar: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  ),
+  Dollar: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M12 1v22M17 5.5A4.5 4.5 0 0 0 12 3H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H8.5A4.5 4.5 0 0 1 4 10.5" />
+    </svg>
+  ),
+};
 
 // Small helper: icon + text row
 function IconRow({
@@ -226,32 +251,19 @@ function FeedInner() {
 
                       <div className="mt-2 space-y-1.5">
                         {j.business_name && (
-                          <IconRow
-                            icon={<Building2 className="h-4 w-4" />}
-                            title="Business"
-                          >
+                          <IconRow icon={<Icon.Building className="h-4 w-4" />} title="Business">
                             {j.business_name}
                           </IconRow>
                         )}
-                        <IconRow
-                          icon={<MapPin className="h-4 w-4" />}
-                          title="Location"
-                        >
+                        <IconRow icon={<Icon.MapPin className="h-4 w-4" />} title="Location">
                           {[j.suburb, j.state, j.postcode].filter(Boolean).join(", ")}
                         </IconRow>
                         {completedLabel && (
-                          <IconRow
-                            icon={<Calendar className="h-4 w-4" />}
-                            title="Completed"
-                            className="text-xs"
-                          >
+                          <IconRow icon={<Icon.Calendar className="h-4 w-4" />} title="Completed" className="text-xs">
                             <span className="text-gray-600">Completed {completedLabel}</span>
                           </IconRow>
                         )}
-                        <IconRow
-                          icon={<DollarSign className="h-4 w-4" />}
-                          title="Cost"
-                        >
+                        <IconRow icon={<Icon.Dollar className="h-4 w-4" />} title="Cost">
                           <span className="font-medium text-gray-900">{costDisplay(j)}</span>
                         </IconRow>
                       </div>
@@ -282,32 +294,19 @@ function FeedInner() {
 
                     <div className="mt-2 space-y-1.5">
                       {j.business_name && (
-                        <IconRow
-                          icon={<Building2 className="h-4 w-4" />}
-                          title="Business"
-                        >
+                        <IconRow icon={<Icon.Building className="h-4 w-4" />} title="Business">
                           {j.business_name}
                         </IconRow>
                       )}
-                      <IconRow
-                        icon={<MapPin className="h-4 w-4" />}
-                        title="Location"
-                      >
+                      <IconRow icon={<Icon.MapPin className="h-4 w-4" />} title="Location">
                         {[j.suburb, j.state, j.postcode].filter(Boolean).join(", ")}
                       </IconRow>
                       {completedLabel && (
-                        <IconRow
-                          icon={<Calendar className="h-4 w-4" />}
-                          title="Completed"
-                          className="text-xs"
-                        >
+                        <IconRow icon={<Icon.Calendar className="h-4 w-4" />} title="Completed" className="text-xs">
                           <span className="text-gray-600">Completed {completedLabel}</span>
                         </IconRow>
                       )}
-                      <IconRow
-                        icon={<DollarSign className="h-4 w-4" />}
-                        title="Cost"
-                      >
+                      <IconRow icon={<Icon.Dollar className="h-4 w-4" />} title="Cost">
                         <span className="font-medium text-gray-900">{costDisplay(j)}</span>
                       </IconRow>
                     </div>
