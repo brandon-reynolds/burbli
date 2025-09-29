@@ -37,6 +37,13 @@ function timeAgo(iso?: string | null) {
   return `${days}d ago`;
 }
 
+function formatMonthYear(iso?: string | null) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleString("en-AU", { month: "short", year: "numeric" });
+}
+
 function costDisplay(j: Job) {
   if (j.cost_type === "exact" && j.cost != null && String(j.cost).trim() !== "") {
     const n = Number(j.cost);
@@ -47,7 +54,7 @@ function costDisplay(j: Job) {
     const maxN = Number(j.cost_max);
     const left = isFinite(minN) ? Math.round(minN).toLocaleString() : String(j.cost_min);
     const right = isFinite(maxN) ? Math.round(maxN).toLocaleString() : String(j.cost_max);
-    return `$${left}–$${right}`;
+    return `$${left}–${right}`;
   }
   return "Cost not shared";
 }
@@ -56,7 +63,7 @@ function FeedInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const pathname = usePathname();
-  const isDesktop = useIsDesktop(1024); // lg breakpoint
+  const isDesktop = useIsDesktop(1024);
 
   const [all, setAll] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,7 +89,6 @@ function FeedInner() {
     })();
   }, []);
 
-  // keep URL in sync (nice for sharing and back/forward)
   useEffect(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
@@ -91,14 +97,12 @@ function FeedInner() {
     router.replace(`/feed${params.toString() ? `?${params}` : ""}`, { scroll: false });
   }, [q, stateFilter, onlyRecommended, router]);
 
-  // Build a stable "from" value representing the current feed + filters
   const fromValue = useMemo(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
     if (stateFilter !== "ALL") params.set("state", stateFilter);
     if (onlyRecommended) params.set("rec", "1");
     const path = `${pathname}${params.toString() ? `?${params}` : ""}`;
-    // one param; keep it URL-safe
     return encodeURIComponent(path);
   }, [q, stateFilter, onlyRecommended, pathname]);
 
@@ -116,7 +120,6 @@ function FeedInner() {
     });
   }, [all, q, stateFilter, onlyRecommended]);
 
-  // auto-select first (desktop only)
   useEffect(() => {
     if (!isDesktop) return;
     if (!loading && filtered.length && !selected) setSelected(filtered[0]);
@@ -181,8 +184,8 @@ function FeedInner() {
           <div className="rounded-2xl border bg-white p-6 text-gray-500">No results.</div>
         ) : (
           filtered.map((j) => {
+            const doneLabel = formatMonthYear(j.done_at);
             if (!isDesktop) {
-              // MOBILE: link card; append `from` so detail can return to exact filtered feed
               return (
                 <Link
                   key={j.id}
@@ -196,6 +199,8 @@ function FeedInner() {
                       <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
                       <div className="mt-1 text-sm text-gray-700">{j.business_name || "—"}</div>
                       <div className="mt-1 text-sm text-gray-700">{j.suburb}, {j.state} {j.postcode}</div>
+                      {/* NEW: when it was done */}
+                      {doneLabel && <div className="mt-1 text-xs text-gray-500">Done {doneLabel}</div>}
                       <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
                     </div>
                     {j.recommend && (
@@ -208,7 +213,6 @@ function FeedInner() {
               );
             }
 
-            // DESKTOP: master–detail selects in-place with coloured ring
             const active = selected?.id === j.id;
             return (
               <button
@@ -222,6 +226,8 @@ function FeedInner() {
                     <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
                     <div className="mt-1 text-sm text-gray-700">{j.business_name || "—"}</div>
                     <div className="mt-1 text-sm text-gray-700">{j.suburb}, {j.state} {j.postcode}</div>
+                    {/* NEW: when it was done */}
+                    {doneLabel && <div className="mt-1 text-xs text-gray-500">Done {doneLabel}</div>}
                     <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
                   </div>
                   {j.recommend && (
