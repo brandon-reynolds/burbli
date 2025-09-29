@@ -179,49 +179,56 @@ function FeedInner() {
     <section className="mx-auto max-w-6xl p-4 md:p-8 grid lg:grid-cols-12 gap-6">
       {/* Controls */}
       <div className="lg:col-span-12 rounded-2xl border bg-white p-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <input
-            className="flex-1 min-w-[260px] rounded-xl border p-3"
-            placeholder="Search by title, business, suburb or postcode"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setStateFilter("ALL")}
-              className={`px-3 py-2 rounded-full text-sm ${stateFilter==="ALL"?"bg-black text-white":"bg-gray-100"}`}
-            >
-              ALL ({all.length})
-            </button>
-            {STATES.map(s => {
-              const count = all.filter(j => j.state === s).length;
-              return (
-                <button
-                  key={s}
-                  onClick={() => setStateFilter(s)}
-                  className={`px-3 py-2 rounded-full text-sm ${stateFilter===s?"bg-black text-white":"bg-gray-100"}`}
-                >
-                  {s} ({count})
-                </button>
-              );
-            })}
-            <label className="ml-2 inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={onlyRecommended}
-                onChange={(e)=>setOnlyRecommended(e.target.checked)}
-              />
-              Recommended only
-            </label>
-            {(q || stateFilter!=="ALL" || onlyRecommended) && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              className="flex-1 min-w-[260px] rounded-xl border p-3"
+              placeholder="Search by title, business, suburb or postcode"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={() => { setQ(""); setStateFilter("ALL"); setOnlyRecommended(false); }}
-                className="text-sm underline"
+                onClick={() => setStateFilter("ALL")}
+                className={`px-3 py-2 rounded-full text-sm ${stateFilter==="ALL"?"bg-black text-white":"bg-gray-100"}`}
               >
-                Clear filters
+                ALL ({all.length})
               </button>
-            )}
+              {STATES.map(s => {
+                const count = all.filter(j => j.state === s).length;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setStateFilter(s)}
+                    className={`px-3 py-2 rounded-full text-sm ${stateFilter===s?"bg-black text-white":"bg-gray-100"}`}
+                  >
+                    {s} ({count})
+                  </button>
+                );
+              })}
+              <label className="ml-2 inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={onlyRecommended}
+                  onChange={(e)=>setOnlyRecommended(e.target.checked)}
+                />
+                Recommended only
+              </label>
+              {(q || stateFilter!=="ALL" || onlyRecommended) && (
+                <button
+                  onClick={() => { setQ(""); setStateFilter("ALL"); setOnlyRecommended(false); }}
+                  className="text-sm underline"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* NEW: tiny explainer to make this crystal clear */}
+          <p className="text-xs text-gray-500">
+            These are <span className="font-medium text-gray-700">completed</span> projects shared by neighbours — not open job ads.
+          </p>
         </div>
       </div>
 
@@ -260,7 +267,10 @@ function FeedInner() {
                         </IconRow>
                         {completedLabel && (
                           <IconRow icon={<Icon.Calendar className="h-4 w-4" />} title="Completed">
-                            <span className="text-gray-600">Completed {completedLabel}</span>
+                            <span className="inline-flex items-center gap-2">
+                              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">Completed</span>
+                              <span className="text-gray-700">{completedLabel}</span>
+                            </span>
                           </IconRow>
                         )}
                         <IconRow icon={<Icon.Dollar className="h-4 w-4" />} title="Cost">
@@ -303,7 +313,10 @@ function FeedInner() {
                       </IconRow>
                       {completedLabel && (
                         <IconRow icon={<Icon.Calendar className="h-4 w-4" />} title="Completed">
-                          <span className="text-gray-600">Completed {completedLabel}</span>
+                          <span className="inline-flex items-center gap-2">
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">Completed</span>
+                            <span className="text-gray-700">{completedLabel}</span>
+                          </span>
                         </IconRow>
                       )}
                       <IconRow icon={<Icon.Dollar className="h-4 w-4" />} title="Cost">
