@@ -1,28 +1,22 @@
-// types.ts — keep this in sync with Supabase `jobs` table
-
+// types.ts
 export type CostType = "exact" | "range" | "na" | null;
 
-export type Job = {
+export interface Job {
   id: string;
-  owner_id: string | null;
-  created_at: string;
-
-  title: string;
-  business_name: string;
-  suburb: string;
-  state: string;
-  postcode: number | null;
-
-  recommend: boolean;
-  notes: string | null;
-
-  // cost fields (all nullable in DB)
+  title: string | null;
+  business_name: string | null;
+  suburb: string | null;
+  state: string | null;
+  postcode: number | string | null;
+  recommend: boolean | null;
   cost_type: CostType;
-  cost: string | null;      // when cost_type === "exact"
-  cost_min: string | null;  // when cost_type === "range"
-  cost_max: string | null;  // when cost_type === "range"
-};
+  cost: number | string | null;
+  cost_min: number | string | null;
+  cost_max: number | string | null;
+  notes: string | null;
+  owner_id: string | null;
+  created_at: string | null;
 
-// Optional helper types if you ever want them:
-export type NewJobPayload = Omit<Job, "id" | "created_at">;
-export type UpdateJobPayload = Partial<Omit<Job, "id" | "created_at" | "owner_id">>;
+  /** NEW: when the job was actually done (yyyy-mm-dd) */
+  done_at: string | null;
+}
