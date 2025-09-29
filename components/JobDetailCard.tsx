@@ -6,6 +6,13 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
+function formatMonthYear(iso?: string | null) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleString("en-AU", { month: "long", year: "numeric" });
+}
+
 export default function JobDetailCard({ job }: { job: Job | null }) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -50,6 +57,8 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     }
     return "Cost not shared";
   }, [job]);
+
+  const doneLabel = formatMonthYear(job?.done_at);
 
   async function copyLink() {
     if (!shareUrl) return;
@@ -175,6 +184,14 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
           {job.state ? `, ${job.state}` : ""} {job.postcode ? job.postcode : ""}
         </div>
       </section>
+
+      {/* NEW: When it was done */}
+      {doneLabel && (
+        <section className="mt-6">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">When it was done</div>
+          <div className="mt-1 text-base">{doneLabel}</div>
+        </section>
+      )}
 
       <section className="mt-6">
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cost</div>
