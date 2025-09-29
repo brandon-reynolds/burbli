@@ -169,28 +169,50 @@ function FeedInner() {
     return encodeURIComponent(path);
   }, [q, stateFilter, onlyRecommended, pathname]);
 
-  // 🔎 Robust filtering: match tokens across suburb, state, postcode, and combined forms
-  const filtered = useMemo(() => {
-    const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return all.filter((j) => {
-      const parts = [
-        j.title,
-        j.business_name,
-        j.suburb,
-        j.state,
-        j.postcode != null ? String(j.postcode) : "",
-        `${j.suburb ?? ""} ${j.state ?? ""}`.trim(),
-        `${j.suburb ?? ""} ${j.state ?? ""} ${j.postcode ?? ""}`.trim(),
-      ]
-        .map(v => (v ?? "").toString().toLowerCase());
+  // Build a robust haystack for free-text search
+  const tokens = useMemo(
+    () => q.trim().toLowerCase().split(/\s+/).filter(Boolean),
+    [q]
+  );
 
-      const haystack = parts.join(" | ");
-      const okQ = tokens.length === 0 || tokens.every(t => haystack.includes(t));
-      const okS = stateFilter === "ALL" || j.state === stateFilter;
-      const okR = !onlyRecommended || !!j.recommend;
-      return okQ && okS && okR;
-    });
-  }, [all, q, stateFilter, onlyRecommended]);
+  const matchesTokens = (j: Job) => {
+    if (tokens.length === 0) return true;
+    const parts = [
+      j.title,
+      j.business_name,
+      j.suburb,
+      j.state,
+      j.postcode != null ? String(j.postcode) : "",
+      `${j.suburb ?? ""} ${j.state ?? ""}`.trim(),
+      `${j.suburb ?? ""} ${j.state ?? ""} ${j.postcode ?? ""}`.trim(),
+    ].map(v => (v ?? "").toString().toLowerCase());
+    const haystack = parts.join(" | ");
+    return tokens.every(t => haystack.includes(t));
+  };
+
+  // ✅ Base list used for counts: query + recOnly applied, NOT state filter
+  const baseCandidates = useMemo(
+    () => all.filter(j => matchesTokens(j) && (!onlyRecommended || !!j.recommend)),
+    [all, tokens, onlyRecommended]
+  );
+
+  // ✅ Counts that reflect current query + recOnly
+  const counts = useMemo(() => {
+    const byState: Record<string, number> = Object.fromEntries(
+      (["ALL", ...STATES] as const).map(s => [s, 0])
+    );
+    byState.ALL = baseCandidates.length;
+    for (const j of baseCandidates) {
+      const st = (j.state ?? "") as (typeof STATES)[number];
+      if (STATES.includes(st)) byState[st] = (byState[st] ?? 0) + 1;
+    }
+    return byState;
+  }, [baseCandidates]);
+
+  // Final filtered list shown on the left (applies state filter to baseCandidates)
+  const filtered = useMemo(() => {
+    return baseCandidates.filter(j => stateFilter === "ALL" || j.state === stateFilter);
+  }, [baseCandidates, stateFilter]);
 
   // desktop auto-select
   useEffect(() => {
@@ -216,20 +238,17 @@ function FeedInner() {
                 onClick={() => setStateFilter("ALL")}
                 className={`px-3 py-2 rounded-full text-sm ${stateFilter==="ALL"?"bg-black text-white":"bg-gray-100"}`}
               >
-                ALL ({all.length})
+                ALL ({counts.ALL ?? 0})
               </button>
-              {STATES.map(s => {
-                const count = all.filter(j => j.state === s).length;
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setStateFilter(s)}
-                    className={`px-3 py-2 rounded-full text-sm ${stateFilter===s?"bg-black text-white":"bg-gray-100"}`}
-                  >
-                    {s} ({count})
-                  </button>
-                );
-              })}
+              {STATES.map(s => (
+                <button
+                  key={s}
+                  onClick={() => setStateFilter(s)}
+                  className={`px-3 py-2 rounded-full text-sm ${stateFilter===s?"bg-black text-white":"bg-gray-100"}`}
+                >
+                  {s} ({counts[s] ?? 0})
+                </button>
+              ))}
               <label className="ml-2 inline-flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -269,7 +288,7 @@ function FeedInner() {
               return (
                 <Link
                   key={j.id}
-                  href={`/post/${j.id}?from=${fromValue}`}
+                  href={`/post/${j.id}?from=${encodeURIComponent(`${pathname}${window.location.search}`)}`}
                   className="block rounded-2xl border bg-white p-4 hover:border-gray-300"
                   prefetch={false}
                 >
