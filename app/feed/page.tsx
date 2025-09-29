@@ -137,31 +137,26 @@ function FeedInner() {
     })();
   }, []);
 
-  /** 🔁 NEW: keep local filters in sync with URL when it changes from outside (e.g. right-panel links) */
+  /** Keep local filters in sync when URL changes from outside (e.g. detail links) */
   useEffect(() => {
     const qParam = sp.get("q") ?? "";
     const stParam = sp.get("state") ?? "ALL";
     const recParam = sp.get("rec") === "1";
-
     if (qParam !== q) setQ(qParam);
     if (stParam !== stateFilter) setStateFilter(stParam);
     if (recParam !== onlyRecommended) setOnlyRecommended(recParam);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp]); // depend only on search params object
+  }, [sp]);
 
-  // Push current filters to URL (avoids stale sharing/back/forward)
+  // Push current filters to URL
   useEffect(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
     if (stateFilter !== "ALL") params.set("state", stateFilter);
     if (onlyRecommended) params.set("rec", "1");
-
     const next = `/feed${params.toString() ? `?${params}` : ""}`;
-    // Only replace if it actually changed (prevents needless loops)
     const current = typeof window !== "undefined" ? window.location.pathname + window.location.search : "";
-    if (next !== current) {
-      router.replace(next, { scroll: false });
-    }
+    if (next !== current) router.replace(next, { scroll: false });
   }, [q, stateFilter, onlyRecommended, router]);
 
   // value for ?from=
@@ -174,14 +169,23 @@ function FeedInner() {
     return encodeURIComponent(path);
   }, [q, stateFilter, onlyRecommended, pathname]);
 
+  // 🔎 Robust filtering: match tokens across suburb, state, postcode, and combined forms
   const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
+    const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return all.filter((j) => {
-      const okQ =
-        !s ||
-        [j.title, j.suburb, j.business_name, String(j.postcode)]
-          .map(v => (v ?? "").toString().toLowerCase())
-          .some(v => v.includes(s));
+      const parts = [
+        j.title,
+        j.business_name,
+        j.suburb,
+        j.state,
+        j.postcode != null ? String(j.postcode) : "",
+        `${j.suburb ?? ""} ${j.state ?? ""}`.trim(),
+        `${j.suburb ?? ""} ${j.state ?? ""} ${j.postcode ?? ""}`.trim(),
+      ]
+        .map(v => (v ?? "").toString().toLowerCase());
+
+      const haystack = parts.join(" | ");
+      const okQ = tokens.length === 0 || tokens.every(t => haystack.includes(t));
       const okS = stateFilter === "ALL" || j.state === stateFilter;
       const okR = !onlyRecommended || !!j.recommend;
       return okQ && okS && okR;
