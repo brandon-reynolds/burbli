@@ -12,6 +12,15 @@ type Props = {
   submitLabel?: string;
 };
 
+function isoToMonthValue(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`; // <input type="month"> value
+}
+
 export default function JobForm({ initialJob = null, onCreated, onSaved, submitLabel }: Props) {
   const [title, setTitle] = useState(initialJob?.title ?? "");
   const [business, setBusiness] = useState(initialJob?.business_name ?? "");
@@ -21,8 +30,8 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
   const [recommend, setRecommend] = useState<boolean>(initialJob?.recommend ?? true);
   const [notes, setNotes] = useState(initialJob?.notes ?? "");
 
-  // NEW: when the job was done (optional)
-  const [doneAt, setDoneAt] = useState<string>(initialJob?.done_at ?? "");
+  // NEW: month/year only
+  const [doneAtMonth, setDoneAtMonth] = useState<string>(isoToMonthValue(initialJob?.done_at));
 
   const [costType, setCostType] = useState<"exact"|"range"|"na">(initialJob?.cost_type ?? "na");
   const [cost, setCost] = useState(initialJob?.cost ? String(initialJob.cost) : "");
@@ -54,7 +63,8 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
       cost: null,
       cost_min: null,
       cost_max: null,
-      done_at: doneAt || null, // ← NEW
+      // store first day of month for DATE column
+      done_at: doneAtMonth ? `${doneAtMonth}-01` : null,
     };
     if (costType === "exact") base.cost = cost.trim();
     if (costType === "range") {
@@ -77,7 +87,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
         onSaved?.(res.data as Job);
         setTitle(""); setBusiness(""); setSuburb(""); setStateA("VIC"); setPostcode("");
         setRecommend(true); setNotes(""); setCostType("na"); setCost(""); setCostMin(""); setCostMax("");
-        setDoneAt("");
+        setDoneAtMonth("");
       }
     } catch (err: any) {
       alert(err?.message || "Could not save changes.");
@@ -117,16 +127,16 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
         </div>
       </div>
 
-      {/* NEW: job done date */}
+      {/* NEW: month/year only */}
       <div>
         <label className="block text-sm font-medium">When was the job done? <span className="text-gray-400">(optional)</span></label>
         <input
-          type="date"
+          type="month"
           className="mt-1 w-full max-w-xs rounded-xl border px-3 py-2"
-          value={doneAt}
-          onChange={(e)=>setDoneAt(e.target.value)}
+          value={doneAtMonth}
+          onChange={(e)=>setDoneAtMonth(e.target.value)}
         />
-        <p className="mt-1 text-xs text-gray-500">Approximate date is fine.</p>
+        <p className="mt-1 text-xs text-gray-500">Month and year only (approximate is fine).</p>
       </div>
 
       <div>
