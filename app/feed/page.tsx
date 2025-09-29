@@ -85,7 +85,6 @@ const Icon = {
   ),
 };
 
-// Small helper: icon + text row
 function IconRow({
   icon,
   children,
@@ -113,9 +112,12 @@ function FeedInner() {
 
   const [all, setAll] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Local filter state (initialised from URL)
   const [q, setQ] = useState(sp.get("q") ?? "");
   const [stateFilter, setStateFilter] = useState<string>(sp.get("state") ?? "ALL");
   const [onlyRecommended, setOnlyRecommended] = useState(sp.get("rec") === "1");
+
   const [selected, setSelected] = useState<Job | null>(null);
 
   useEffect(() => {
@@ -135,13 +137,31 @@ function FeedInner() {
     })();
   }, []);
 
-  // keep URL in sync
+  /** 🔁 NEW: keep local filters in sync with URL when it changes from outside (e.g. right-panel links) */
+  useEffect(() => {
+    const qParam = sp.get("q") ?? "";
+    const stParam = sp.get("state") ?? "ALL";
+    const recParam = sp.get("rec") === "1";
+
+    if (qParam !== q) setQ(qParam);
+    if (stParam !== stateFilter) setStateFilter(stParam);
+    if (recParam !== onlyRecommended) setOnlyRecommended(recParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp]); // depend only on search params object
+
+  // Push current filters to URL (avoids stale sharing/back/forward)
   useEffect(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
     if (stateFilter !== "ALL") params.set("state", stateFilter);
     if (onlyRecommended) params.set("rec", "1");
-    router.replace(`/feed${params.toString() ? `?${params}` : ""}`, { scroll: false });
+
+    const next = `/feed${params.toString() ? `?${params}` : ""}`;
+    // Only replace if it actually changed (prevents needless loops)
+    const current = typeof window !== "undefined" ? window.location.pathname + window.location.search : "";
+    if (next !== current) {
+      router.replace(next, { scroll: false });
+    }
   }, [q, stateFilter, onlyRecommended, router]);
 
   // value for ?from=
@@ -179,53 +199,58 @@ function FeedInner() {
     <section className="mx-auto max-w-6xl p-4 md:p-8 grid lg:grid-cols-12 gap-6">
       {/* Controls */}
       <div className="lg:col-span-12 rounded-2xl border bg-white p-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <input
-            className="flex-1 min-w-[260px] rounded-xl border p-3"
-            placeholder="Search by title, business, suburb or postcode"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setStateFilter("ALL")}
-              className={`px-3 py-2 rounded-full text-sm ${stateFilter==="ALL"?"bg-black text-white":"bg-gray-100"}`}
-            >
-              ALL ({all.length})
-            </button>
-            {STATES.map(s => {
-              const count = all.filter(j => j.state === s).length;
-              return (
-                <button
-                  key={s}
-                  onClick={() => setStateFilter(s)}
-                  className={`px-3 py-2 rounded-full text-sm ${stateFilter===s?"bg-black text-white":"bg-gray-100"}`}
-                >
-                  {s} ({count})
-                </button>
-              );
-            })}
-            <label className="ml-2 inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={onlyRecommended}
-                onChange={(e)=>setOnlyRecommended(e.target.checked)}
-              />
-              Recommended only
-            </label>
-            {(q || stateFilter!=="ALL" || onlyRecommended) && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              className="flex-1 min-w-[260px] rounded-xl border p-3"
+              placeholder="Search by title, business, suburb or postcode"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={() => { setQ(""); setStateFilter("ALL"); setOnlyRecommended(false); }}
-                className="text-sm underline"
+                onClick={() => setStateFilter("ALL")}
+                className={`px-3 py-2 rounded-full text-sm ${stateFilter==="ALL"?"bg-black text-white":"bg-gray-100"}`}
               >
-                Clear filters
+                ALL ({all.length})
               </button>
-            )}
+              {STATES.map(s => {
+                const count = all.filter(j => j.state === s).length;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setStateFilter(s)}
+                    className={`px-3 py-2 rounded-full text-sm ${stateFilter===s?"bg-black text-white":"bg-gray-100"}`}
+                  >
+                    {s} ({count})
+                  </button>
+                );
+              })}
+              <label className="ml-2 inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={onlyRecommended}
+                  onChange={(e)=>setOnlyRecommended(e.target.checked)}
+                />
+                Recommended only
+              </label>
+              {(q || stateFilter!=="ALL" || onlyRecommended) && (
+                <button
+                  onClick={() => { setQ(""); setStateFilter("ALL"); setOnlyRecommended(false); }}
+                  className="text-sm underline"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           </div>
+          <p className="text-xs text-gray-500">
+            These are <span className="font-medium text-gray-700">completed</span> projects shared by neighbours — not open job ads.
+          </p>
         </div>
       </div>
 
-      {/* Left list with icon rows */}
+      {/* Left list */}
       <div className="lg:col-span-5 space-y-3">
         {loading ? (
           <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
@@ -260,7 +285,7 @@ function FeedInner() {
                         </IconRow>
                         {completedLabel && (
                           <IconRow icon={<Icon.Calendar className="h-4 w-4" />} title="Completed">
-                            <span className="text-gray-600">Completed {completedLabel}</span>
+                            <span className="text-gray-700">Completed {completedLabel}</span>
                           </IconRow>
                         )}
                         <IconRow icon={<Icon.Dollar className="h-4 w-4" />} title="Cost">
@@ -303,7 +328,7 @@ function FeedInner() {
                       </IconRow>
                       {completedLabel && (
                         <IconRow icon={<Icon.Calendar className="h-4 w-4" />} title="Completed">
-                          <span className="text-gray-600">Completed {completedLabel}</span>
+                          <span className="text-gray-700">Completed {completedLabel}</span>
                         </IconRow>
                       )}
                       <IconRow icon={<Icon.Dollar className="h-4 w-4" />} title="Cost">
