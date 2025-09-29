@@ -7,6 +7,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job as JobT } from "@/types";
 import JobDetailCard from "@/components/JobDetailCard";
+import { Building2, MapPin, Calendar, DollarSign } from "lucide-react";
 
 type Job = JobT;
 const STATES = ["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"] as const;
@@ -59,6 +60,26 @@ function costDisplay(j: Job) {
   return "Cost not shared";
 }
 
+// Small helper: icon + text row
+function IconRow({
+  icon,
+  children,
+  title,
+  className = "",
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  title?: string;
+  className?: string;
+}) {
+  return (
+    <div title={title} className={`flex items-start gap-2 text-sm ${className}`}>
+      <span className="mt-[2px] text-gray-500">{icon}</span>
+      <span className="text-gray-700 min-w-0 truncate">{children}</span>
+    </div>
+  );
+}
+
 function FeedInner() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -89,6 +110,7 @@ function FeedInner() {
     })();
   }, []);
 
+  // keep URL in sync
   useEffect(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
@@ -97,6 +119,7 @@ function FeedInner() {
     router.replace(`/feed${params.toString() ? `?${params}` : ""}`, { scroll: false });
   }, [q, stateFilter, onlyRecommended, router]);
 
+  // value for ?from=
   const fromValue = useMemo(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
@@ -120,6 +143,7 @@ function FeedInner() {
     });
   }, [all, q, stateFilter, onlyRecommended]);
 
+  // desktop auto-select
   useEffect(() => {
     if (!isDesktop) return;
     if (!loading && filtered.length && !selected) setSelected(filtered[0]);
@@ -176,7 +200,7 @@ function FeedInner() {
         </div>
       </div>
 
-      {/* Left list */}
+      {/* Left list with icon rows */}
       <div className="lg:col-span-5 space-y-3">
         {loading ? (
           <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
@@ -184,7 +208,9 @@ function FeedInner() {
           <div className="rounded-2xl border bg-white p-6 text-gray-500">No results.</div>
         ) : (
           filtered.map((j) => {
-            const doneLabel = formatMonthYear(j.done_at);
+            const completedLabel = formatMonthYear(j.done_at);
+
+            // MOBILE: link card
             if (!isDesktop) {
               return (
                 <Link
@@ -194,15 +220,43 @@ function FeedInner() {
                   prefetch={false}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-xs text-gray-500">{timeAgo(j.created_at)}</div>
-                      <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
-                      <div className="mt-1 text-sm text-gray-700">{j.business_name || "—"}</div>
-                      <div className="mt-1 text-sm text-gray-700">{j.suburb}, {j.state} {j.postcode}</div>
-                      {/* NEW: when it was done */}
-                      {doneLabel && <div className="mt-1 text-xs text-gray-500">Done {doneLabel}</div>}
-                      <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
+                      <div className="mt-1 font-semibold line-clamp-2">{j.title || "Untitled"}</div>
+
+                      <div className="mt-2 space-y-1.5">
+                        {j.business_name && (
+                          <IconRow
+                            icon={<Building2 className="h-4 w-4" />}
+                            title="Business"
+                          >
+                            {j.business_name}
+                          </IconRow>
+                        )}
+                        <IconRow
+                          icon={<MapPin className="h-4 w-4" />}
+                          title="Location"
+                        >
+                          {[j.suburb, j.state, j.postcode].filter(Boolean).join(", ")}
+                        </IconRow>
+                        {completedLabel && (
+                          <IconRow
+                            icon={<Calendar className="h-4 w-4" />}
+                            title="Completed"
+                            className="text-xs"
+                          >
+                            <span className="text-gray-600">Completed {completedLabel}</span>
+                          </IconRow>
+                        )}
+                        <IconRow
+                          icon={<DollarSign className="h-4 w-4" />}
+                          title="Cost"
+                        >
+                          <span className="font-medium text-gray-900">{costDisplay(j)}</span>
+                        </IconRow>
+                      </div>
                     </div>
+
                     {j.recommend && (
                       <span className="shrink-0 rounded-full bg-green-100 text-green-800 text-xs px-2 py-1">
                         Recommended
@@ -213,6 +267,7 @@ function FeedInner() {
               );
             }
 
+            // DESKTOP: selectable card
             const active = selected?.id === j.id;
             return (
               <button
@@ -221,15 +276,43 @@ function FeedInner() {
                 className={`w-full text-left rounded-2xl border bg-white p-4 hover:border-gray-300 ${active ? "ring-2 ring-indigo-200 border-indigo-300" : ""}`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-xs text-gray-500">{timeAgo(j.created_at)}</div>
-                    <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
-                    <div className="mt-1 text-sm text-gray-700">{j.business_name || "—"}</div>
-                    <div className="mt-1 text-sm text-gray-700">{j.suburb}, {j.state} {j.postcode}</div>
-                    {/* NEW: when it was done */}
-                    {doneLabel && <div className="mt-1 text-xs text-gray-500">Done {doneLabel}</div>}
-                    <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
+                    <div className="mt-1 font-semibold line-clamp-2">{j.title || "Untitled"}</div>
+
+                    <div className="mt-2 space-y-1.5">
+                      {j.business_name && (
+                        <IconRow
+                          icon={<Building2 className="h-4 w-4" />}
+                          title="Business"
+                        >
+                          {j.business_name}
+                        </IconRow>
+                      )}
+                      <IconRow
+                        icon={<MapPin className="h-4 w-4" />}
+                        title="Location"
+                      >
+                        {[j.suburb, j.state, j.postcode].filter(Boolean).join(", ")}
+                      </IconRow>
+                      {completedLabel && (
+                        <IconRow
+                          icon={<Calendar className="h-4 w-4" />}
+                          title="Completed"
+                          className="text-xs"
+                        >
+                          <span className="text-gray-600">Completed {completedLabel}</span>
+                        </IconRow>
+                      )}
+                      <IconRow
+                        icon={<DollarSign className="h-4 w-4" />}
+                        title="Cost"
+                      >
+                        <span className="font-medium text-gray-900">{costDisplay(j)}</span>
+                      </IconRow>
+                    </div>
                   </div>
+
                   {j.recommend && (
                     <span className="shrink-0 rounded-full bg-green-100 text-green-800 text-xs px-2 py-1">
                       Recommended
