@@ -11,12 +11,12 @@ type Picked = {
 };
 
 type Props = {
-  label?: string;                     // initial display text
+  label?: string;
   placeholder?: string;
   disabled?: boolean;
-  onPick: (p: Picked) => void;        // send chosen parts to parent
-  onBlurAutoFillEmpty?: boolean;      // if true and there is a top result, pick it on blur
-  className?: string;                 // extra classes for the wrapper
+  onPick: (p: Picked) => void;
+  onBlurAutoFillEmpty?: boolean;
+  className?: string;
 };
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
@@ -34,7 +34,10 @@ export default function SuburbAutocomplete({
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<Picked[]>([]);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
+  const [isFocused, setIsFocused] = useState(false);
+
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const listId = useMemo(() => `suburb-list-${Math.random().toString(36).slice(2)}`, []);
 
   // Close on outside click
@@ -55,6 +58,7 @@ export default function SuburbAutocomplete({
     const q = query.trim();
     if (!q) {
       setItems([]);
+      setOpen(false);
       return;
     }
 
@@ -64,9 +68,9 @@ export default function SuburbAutocomplete({
         const url = new URL(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`);
         url.searchParams.set("access_token", MAPBOX_TOKEN);
         url.searchParams.set("autocomplete", "true");
-        url.searchParams.set("country", "AU");                       // AU-only
+        url.searchParams.set("country", "AU");
         url.searchParams.set("language", "en");
-        url.searchParams.set("types", "place,locality,postcode");    // suburb/locality/postcode
+        url.searchParams.set("types", "place,locality,postcode");
         url.searchParams.set("limit", "8");
 
         const res = await fetch(url.toString(), { cache: "no-store" });
@@ -75,12 +79,10 @@ export default function SuburbAutocomplete({
         const next: Picked[] = (json?.features ?? []).map((f: any) => {
           const suburb = (f?.text ?? null) as string | null;
 
-          // Context: region (state) & postcode
           const ctx: any[] = Array.isArray(f?.context) ? f.context : [];
           const region = ctx.find((c) => typeof c.id === "string" && c.id.startsWith("region"));
           const postcode = ctx.find((c) => typeof c.id === "string" && c.id.startsWith("postcode"));
 
-          // Region short_code typically "AU-VIC"
           let state: string | null = null;
           const sc = region?.short_code as string | undefined;
           if (sc && /^AU-/.test(sc)) state = sc.slice(3).toUpperCase();
@@ -103,16 +105,17 @@ export default function SuburbAutocomplete({
 
         setItems(unique);
         setActiveIndex(unique.length ? 0 : -1);
-        setOpen(true);
+        setOpen(isFocused && unique.length > 0); // only open if input is focused
       } catch {
         setItems([]);
+        setOpen(false);
       } finally {
         setLoading(false);
       }
     }, 220);
 
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, isFocused]);
 
   function choose(i: number) {
     const it = items[i];
@@ -120,6 +123,8 @@ export default function SuburbAutocomplete({
     setQuery(it.label);
     setOpen(false);
     onPick(it);
+    // blur to prevent immediate reopen on focus handlers
+    setTimeout(() => inputRef.current?.blur(), 0);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -138,41 +143,61 @@ export default function SuburbAutocomplete({
     }
   }
 
-  async function onBlur() {
-    // Optionally auto-pick the first when user tabs/clicks away
-    if (onBlurAutoFillEmpty && query.trim() && items.length && !items.find(i => i.label === query.trim())) {
-      choose(0);
-    }
+  function onFocus() {
+    setIsFocused(true);
+    if (items.length) setOpen(true);
+  }
+
+  function onBlur() {
+    // Slight delay to allow click on an option
+    setTimeout(() => {
+      setIsFocused(false);
+      if (onBlurAutoFillEmpty && query.trim() && items.length && !items.find(i => i.label === query.trim())) {
+        choose(0);
+      } else {
+        setOpen(false);
+      }
+    }, 0);
   }
 
   const emptyState = !loading && query.trim() && items.length === 0;
 
   return (
     <div ref={rootRef} className={`relative ${className}`}>
-      <div className="flex items-center gap-2">
+      <div className="relative">
         <input
+          ref={inputRef}
           aria-autocomplete="list"
           aria-controls={listId}
           aria-expanded={open}
           role="combobox"
           disabled={disabled}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => { if (items.length) setOpen(true); }}
-          onKeyDown={onKeyDown}
+          onChange={(e) => { setQuery(e.target.value); }}
+          onFocus={onFocus}
           onBlur={onBlur}
+          onKeyDown={onKeyDown}
           placeholder={placeholder}
-          className="w-full rounded-xl border px-3 py-2 md:py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
+          className="w-full rounded-xl border pl-3 pr-9 py-2 md:py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
         />
+
+        {/* Inline clear “✕” inside the input (right side) */}
         {query && (
           <button
             type="button"
-            onClick={() => { setQuery(""); setItems([]); setOpen(false); setActiveIndex(-1); }}
-            className="shrink-0 rounded-lg border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+            onMouseDown={(e) => e.preventDefault()} // don't steal focus first
+            onClick={() => {
+              setQuery("");
+              setItems([]);
+              setOpen(false);
+              setActiveIndex(-1);
+              setTimeout(() => inputRef.current?.focus(), 0);
+            }}
             aria-label="Clear"
             title="Clear"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-50"
           >
-            Clear
+            ✕
           </button>
         )}
       </div>
@@ -194,21 +219,19 @@ export default function SuburbAutocomplete({
               role="option"
               aria-selected={idx === activeIndex}
               onMouseEnter={() => setActiveIndex(idx)}
-              onMouseDown={(e) => e.preventDefault()}
+              onMouseDown={(e) => e.preventDefault()} // prevent blur before click
               onClick={() => choose(idx)}
               className={`flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm ${
                 idx === activeIndex ? "bg-gray-100" : "hover:bg-gray-50"
               }`}
-              style={{ minHeight: 44 }} // good touch target
+              style={{ minHeight: 44 }}
               title={it.label}
             >
               <span className="truncate">
-                {/* Left: "Suburb, STATE" */}
                 {it.suburb}
                 {it.state ? `, ${it.state}` : ""}
               </span>
 
-              {/* Right: postcode badge (always visible, even if null -> hidden) */}
               {it.postcode ? (
                 <span className="ml-3 shrink-0 rounded-full border bg-gray-50 px-2 py-0.5 text-xs text-gray-700">
                   {it.postcode}
