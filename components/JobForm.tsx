@@ -31,7 +31,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
   const [title, setTitle] = useState(initialJob?.title ?? "");
   const [business, setBusiness] = useState(initialJob?.business_name ?? "");
 
-  // Location stored internally (postcode optional, state now optional too)
+  // Location (state optional, postcode optional -> stored as 0 if missing due to DB NOT NULL)
   const [suburb, setSuburb] = useState(initialJob?.suburb ?? "");
   const [stateA, setStateA] = useState(initialJob?.state ?? "");
   const [postcode, setPostcode] = useState(initialJob?.postcode ? String(initialJob.postcode) : "");
@@ -39,7 +39,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
   const [recommend, setRecommend] = useState<boolean>(initialJob?.recommend ?? true);
   const [notes, setNotes] = useState(initialJob?.notes ?? "");
 
-  // Single optional cost field
+  // Single optional approx cost
   const [costApprox, setCostApprox] = useState(
     initialJob?.cost != null && initialJob?.cost_type === "exact" ? String(initialJob.cost) : ""
   );
@@ -58,7 +58,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
     return bits || "";
   }, [initialJob?.suburb, initialJob?.state, initialJob?.postcode]);
 
-  // ✅ Only require title, business, suburb (state & postcode optional)
+  // Require only title, business, suburb
   const disabled = useMemo(() => {
     if (!title.trim() || !business.trim()) return true;
     if (!suburb.trim()) return true;
@@ -80,14 +80,15 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
     const trimmedCost = costApprox.replace(/[^\d]/g, "").trim();
     const costNumber = trimmedCost ? parseInt(trimmedCost, 10) : null;
 
+    // Postcode fallback: DB column is NOT NULL, so send 0 when we don't have a valid 4-digit AU postcode
+    const pc = /^\d{4}$/.test(postcode) ? parseInt(postcode, 10) : 0;
+
     const base: any = {
       title: title.trim(),
       business_name: business.trim(),
       suburb: suburb.trim(),
-      // ✅ allow null state if not provided
-      state: stateA.trim() || null,
-      // ✅ store postcode if valid; else null
-      postcode: /^\d{4}$/.test(postcode) ? parseInt(postcode, 10) : null,
+      state: stateA.trim() || null, // optional
+      postcode: pc,                 // never null now
       recommend,
       notes: notes.trim() || null,
       cost_type: costNumber != null ? "exact" : "na",
@@ -137,10 +138,13 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
           value={title}
           onChange={(e)=>setTitle(e.target.value)}
           placeholder="e.g. Replace garage door motor"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
         />
       </div>
 
-      {/* Business */}
+      {/* Business (disable predictive/autofill) */}
       <div>
         <label className="block text-sm font-medium">Who did it *</label>
         <input
@@ -148,6 +152,10 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
           value={business}
           onChange={(e)=>setBusiness(e.target.value)}
           placeholder="Business name"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="text"
         />
       </div>
 
@@ -165,7 +173,8 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
           onBlurAutoFillEmpty
           className="mt-1"
         />
-        <p className="mt-1 text-xs text-gray-500">We’ll fill state and postcode for you (if available).</p>
+        {/* tiny hint only */}
+        <p className="mt-1 text-xs text-gray-500">We’ll fill state and postcode when available.</p>
       </div>
 
       {/* Recommendation */}
@@ -192,6 +201,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
             onChange={(e)=>setCostApprox(e.target.value.replace(/[^\d]/g,""))}
             placeholder="e.g. 3500"
             inputMode="numeric"
+            autoComplete="off"
           />
         </div>
       </div>
@@ -232,6 +242,8 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
           rows={5}
           value={notes}
           onChange={(e)=>setNotes(e.target.value)}
+          autoCorrect="off"
+          spellCheck={false}
         />
       </div>
 
