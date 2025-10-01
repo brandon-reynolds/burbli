@@ -82,8 +82,9 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
 
   const isMine = currentUserId && job.owner_id === currentUserId;
 
-  // NEW: consistent location format with postcode
-  const location = [job.suburb, job.state, job.postcode].filter(Boolean).join(", ");
+  // Location string WITHOUT postcode
+  const locLabel = [job.suburb, job.state].filter(Boolean).join(", ");
+  const locQuery = `${job.suburb ?? ""} ${job.state ?? ""}`.trim();
 
   return (
     <article className="rounded-2xl border bg-white p-5 md:p-6">
@@ -165,7 +166,14 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
       <section className="mt-6">
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Location</div>
         <div className="mt-1 text-base">
-          {location || "—"}
+          {locLabel ? (
+            <Link
+              href={`/feed?q=${encodeURIComponent(locQuery)}`}
+              className="underline"
+            >
+              {locLabel}
+            </Link>
+          ) : "—"}
         </div>
       </section>
 
