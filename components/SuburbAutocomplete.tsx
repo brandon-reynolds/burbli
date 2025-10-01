@@ -64,24 +64,23 @@ export default function SuburbAutocomplete({
         const url = new URL(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`);
         url.searchParams.set("access_token", MAPBOX_TOKEN);
         url.searchParams.set("autocomplete", "true");
-        url.searchParams.set("country", "AU");                 // AU-only
+        url.searchParams.set("country", "AU");                       // AU-only
         url.searchParams.set("language", "en");
-        url.searchParams.set("types", "place,locality,postcode"); // suburb/locality/postcode
+        url.searchParams.set("types", "place,locality,postcode");    // suburb/locality/postcode
         url.searchParams.set("limit", "8");
 
         const res = await fetch(url.toString(), { cache: "no-store" });
         const json = await res.json();
 
         const next: Picked[] = (json?.features ?? []).map((f: any) => {
-          // Suburb/locality text
           const suburb = (f?.text ?? null) as string | null;
 
-          // Find region (state) and postcode in the context list
+          // Context: region (state) & postcode
           const ctx: any[] = Array.isArray(f?.context) ? f.context : [];
           const region = ctx.find((c) => typeof c.id === "string" && c.id.startsWith("region"));
           const postcode = ctx.find((c) => typeof c.id === "string" && c.id.startsWith("postcode"));
 
-          // Region short_code typically "AU-VIC" -> take trailing part
+          // Region short_code typically "AU-VIC"
           let state: string | null = null;
           const sc = region?.short_code as string | undefined;
           if (sc && /^AU-/.test(sc)) state = sc.slice(3).toUpperCase();
@@ -89,10 +88,9 @@ export default function SuburbAutocomplete({
 
           const pc = postcode?.text ? String(postcode.text) : null;
 
-          // Build display label like "Epping, VIC 3076"
-          const bits = [suburb, state, pc].filter(Boolean).join(", ").replace(", ,", ",");
+          const labelBits = [suburb, state, pc].filter(Boolean).join(", ");
           return {
-            label: bits || (f.place_name as string),
+            label: labelBits || (f.place_name as string),
             suburb,
             state,
             postcode: pc,
@@ -106,13 +104,12 @@ export default function SuburbAutocomplete({
         setItems(unique);
         setActiveIndex(unique.length ? 0 : -1);
         setOpen(true);
-      } catch (err) {
-        // swallow
+      } catch {
         setItems([]);
       } finally {
         setLoading(false);
       }
-    }, 220); // snappy debounce
+    }, 220);
 
     return () => clearTimeout(t);
   }, [query]);
@@ -142,7 +139,7 @@ export default function SuburbAutocomplete({
   }
 
   async function onBlur() {
-    // Optionally auto-pick the first when user tabs away
+    // Optionally auto-pick the first when user tabs/clicks away
     if (onBlurAutoFillEmpty && query.trim() && items.length && !items.find(i => i.label === query.trim())) {
       choose(0);
     }
@@ -203,8 +200,22 @@ export default function SuburbAutocomplete({
                 idx === activeIndex ? "bg-gray-100" : "hover:bg-gray-50"
               }`}
               style={{ minHeight: 44 }} // good touch target
+              title={it.label}
             >
-              <span className="truncate">{it.label}</span>
+              <span className="truncate">
+                {/* Left: "Suburb, STATE" */}
+                {it.suburb}
+                {it.state ? `, ${it.state}` : ""}
+              </span>
+
+              {/* Right: postcode badge (always visible, even if null -> hidden) */}
+              {it.postcode ? (
+                <span className="ml-3 shrink-0 rounded-full border bg-gray-50 px-2 py-0.5 text-xs text-gray-700">
+                  {it.postcode}
+                </span>
+              ) : (
+                <span className="ml-3 shrink-0 w-0" />
+              )}
             </button>
           ))}
 
