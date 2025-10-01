@@ -59,7 +59,7 @@ function costDisplay(j: Job) {
   return "Cost not shared";
 }
 
-/** Inline SVG icons (no external deps) */
+/** Tiny inline icons (no deps) */
 const Icon = {
   Building: (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
@@ -119,7 +119,6 @@ function IconRow({
   );
 }
 
-// Compare numeric cost range
 function getJobCostRange(j: Job): { min: number | null; max: number | null } {
   if (j.cost_type === "exact") {
     const n = Number(j.cost);
@@ -138,12 +137,11 @@ function FeedInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const pathname = usePathname();
-  const isDesktop = useIsDesktop(1024);
+  const isDesktop = useIsDesktop(1024); // ✅ hook called once at top
 
   const [all, setAll] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Local filter state (from URL)
   const [q, setQ] = useState(sp.get("q") ?? "");
   const [stateFilter, setStateFilter] = useState<string>(sp.get("state") ?? "ALL");
   const [onlyRecommended, setOnlyRecommended] = useState(sp.get("rec") === "1");
@@ -153,7 +151,6 @@ function FeedInner() {
 
   const [selected, setSelected] = useState<Job | null>(null);
 
-  // Filters popover/sheet
   const [filtersOpen, setFiltersOpen] = useState(false);
   const popRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -184,7 +181,7 @@ function FeedInner() {
     })();
   }, []);
 
-  // Sync in from URL (external changes)
+  // Sync in from URL
   useEffect(() => {
     const qParam = sp.get("q") ?? "";
     const stParam = sp.get("state") ?? "ALL";
@@ -215,7 +212,7 @@ function FeedInner() {
     if (next !== current) router.replace(next, { scroll: false });
   }, [q, stateFilter, onlyRecommended, minCost, maxCost, yearFilter, router]);
 
-  // from= value
+  // from= back-link value
   const fromValue = useMemo(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
@@ -486,8 +483,8 @@ function FeedInner() {
           filtered.map((j) => {
             const completedLabel = formatMonthYear(j.done_at);
 
-            // MOBILE: link card
-            if (!useIsDesktop()) { // small helper to avoid stale isDesktop during render
+            if (!isDesktop) {
+              // ✅ mobile uses <Link>, no hooks called here
               return (
                 <Link
                   key={j.id}
@@ -530,7 +527,7 @@ function FeedInner() {
               );
             }
 
-            // DESKTOP: selectable card
+            // Desktop: selectable card
             const active = selected?.id === j.id;
             return (
               <button
@@ -591,12 +588,8 @@ function FeedInner() {
       {/* MOBILE FILTER SHEET */}
       {filtersOpen && !isDesktop && (
         <div className="fixed inset-0 z-40">
-          {/* backdrop */}
           <div className="absolute inset-0 bg-black/40" onClick={() => setFiltersOpen(false)} />
-
-          {/* sheet */}
           <div className="absolute inset-0 bg-white flex flex-col">
-            {/* header */}
             <div className="sticky top-0 z-10 border-b bg-white px-4 py-3 flex items-center justify-between">
               <button
                 onClick={() => setFiltersOpen(false)}
@@ -609,9 +602,7 @@ function FeedInner() {
               <div className="w-[68px]" />
             </div>
 
-            {/* content */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-              {/* State (select) */}
               <div>
                 <div className="text-xs font-semibold text-gray-600 mb-2">State</div>
                 <select
@@ -624,7 +615,6 @@ function FeedInner() {
                 </select>
               </div>
 
-              {/* Recommended */}
               <div>
                 <label className="inline-flex items-center gap-3 text-base py-2">
                   <input
@@ -637,7 +627,6 @@ function FeedInner() {
                 </label>
               </div>
 
-              {/* Cost range (stacked, full width) */}
               <div>
                 <div className="text-xs font-semibold text-gray-600 mb-2">Cost range (A$)</div>
                 <div className="space-y-3">
@@ -658,7 +647,6 @@ function FeedInner() {
                 </div>
               </div>
 
-              {/* Year */}
               <div>
                 <div className="text-xs font-semibold text-gray-600 mb-2">Completed year</div>
                 <select
@@ -674,7 +662,6 @@ function FeedInner() {
               </div>
             </div>
 
-            {/* footer */}
             <div className="sticky bottom-0 border-t bg-white p-4 space-y-3">
               <button
                 onClick={() => setFiltersOpen(false)}
