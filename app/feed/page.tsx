@@ -119,7 +119,7 @@ function IconRow({
   );
 }
 
-// Derive comparable numeric cost range for filtering
+// Compare numeric cost range
 function getJobCostRange(j: Job): { min: number | null; max: number | null } {
   if (j.cost_type === "exact") {
     const n = Number(j.cost);
@@ -143,7 +143,7 @@ function FeedInner() {
   const [all, setAll] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Local filter state (initialised from URL)
+  // Local filter state (from URL)
   const [q, setQ] = useState(sp.get("q") ?? "");
   const [stateFilter, setStateFilter] = useState<string>(sp.get("state") ?? "ALL");
   const [onlyRecommended, setOnlyRecommended] = useState(sp.get("rec") === "1");
@@ -153,16 +153,15 @@ function FeedInner() {
 
   const [selected, setSelected] = useState<Job | null>(null);
 
-  // Filters popover / sheet
+  // Filters popover/sheet
   const [filtersOpen, setFiltersOpen] = useState(false);
   const popRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
-      if (isDesktop) {
-        const el = e.target as HTMLElement | null;
-        if (!el || !popRef.current) return;
-        if (!popRef.current.contains(el)) setFiltersOpen(false);
-      }
+      if (!isDesktop) return;
+      const el = e.target as HTMLElement | null;
+      if (!el || !popRef.current) return;
+      if (!popRef.current.contains(el)) setFiltersOpen(false);
     };
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
@@ -185,7 +184,7 @@ function FeedInner() {
     })();
   }, []);
 
-  /** Keep local filters in sync when URL changes from outside (e.g. detail links) */
+  // Sync in from URL (external changes)
   useEffect(() => {
     const qParam = sp.get("q") ?? "";
     const stParam = sp.get("state") ?? "ALL";
@@ -202,7 +201,7 @@ function FeedInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp]);
 
-  // Push current filters to URL
+  // Push to URL
   useEffect(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
@@ -216,7 +215,7 @@ function FeedInner() {
     if (next !== current) router.replace(next, { scroll: false });
   }, [q, stateFilter, onlyRecommended, minCost, maxCost, yearFilter, router]);
 
-  // value for ?from=
+  // from= value
   const fromValue = useMemo(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
@@ -229,7 +228,7 @@ function FeedInner() {
     return encodeURIComponent(path);
   }, [q, stateFilter, onlyRecommended, minCost, maxCost, yearFilter, pathname]);
 
-  // Build a robust haystack for free-text search
+  // Search tokens
   const tokens = useMemo(
     () => q.trim().toLowerCase().split(/\s+/).filter(Boolean),
     [q]
@@ -250,7 +249,7 @@ function FeedInner() {
     return tokens.every(t => haystack.includes(t));
   };
 
-  // Years available (from done_at)
+  // Years list (from done_at)
   const yearsAvailable = useMemo(() => {
     const set = new Set<string>();
     for (const j of all) {
@@ -258,10 +257,10 @@ function FeedInner() {
       const y = new Date(j.done_at).getFullYear();
       if (!isNaN(y)) set.add(String(y));
     }
-    return Array.from(set).sort().reverse(); // newest first
+    return Array.from(set).sort().reverse();
   }, [all]);
 
-  // Base list: query + recommended only + state + cost + year
+  // Final filtered set
   const filtered = useMemo(() => {
     const minN = minCost.trim() ? Number(minCost) : null;
     const maxN = maxCost.trim() ? Number(maxCost) : null;
@@ -270,25 +269,22 @@ function FeedInner() {
       if (onlyRecommended && !j.recommend) return false;
       if (stateFilter !== "ALL" && j.state !== stateFilter) return false;
 
-      // cost range filter (optional)
       if (minN != null || maxN != null) {
         const { min, max } = getJobCostRange(j);
-        if (min == null && max == null) return false; // no cost info — exclude when user set a range
-        if (minN != null && (max == null || max < minN)) return false; // job entirely below min
-        if (maxN != null && (min == null || min > maxN)) return false; // job entirely above max
+        if (min == null && max == null) return false;
+        if (minN != null && (max == null || max < minN)) return false;
+        if (maxN != null && (min == null || min > maxN)) return false;
       }
 
-      // completed year filter (optional)
       if (yearFilter !== "ALL") {
         const y = j.done_at ? new Date(j.done_at).getFullYear() : NaN;
         if (String(y) !== yearFilter) return false;
       }
-
       return true;
     });
   }, [all, matchesTokens, onlyRecommended, stateFilter, minCost, maxCost, yearFilter]);
 
-  // desktop auto-select
+  // Desktop auto select
   useEffect(() => {
     if (!isDesktop) return;
     if (!loading && filtered.length && !selected) setSelected(filtered[0]);
@@ -349,33 +345,17 @@ function FeedInner() {
               {/* Desktop popover */}
               {filtersOpen && isDesktop && (
                 <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border bg-white p-4 shadow-lg">
-                  {/* State */}
+                  {/* State (select) */}
                   <div className="mb-4">
                     <div className="text-xs font-semibold text-gray-600 mb-2">State</div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <label className="inline-flex items-center gap-2 text-sm">
-                        <input
-                          type="radio"
-                          name="state"
-                          className="h-4 w-4"
-                          checked={stateFilter === "ALL"}
-                          onChange={() => setStateFilter("ALL")}
-                        />
-                        All
-                      </label>
-                      {STATES.map((s) => (
-                        <label key={s} className="inline-flex items-center gap-2 text-sm">
-                          <input
-                            type="radio"
-                            name="state"
-                            className="h-4 w-4"
-                            checked={stateFilter === s}
-                            onChange={() => setStateFilter(s)}
-                          />
-                          {s}
-                        </label>
-                      ))}
-                    </div>
+                    <select
+                      className="w-full rounded-xl border px-3 py-2 text-sm"
+                      value={stateFilter}
+                      onChange={(e) => setStateFilter(e.target.value)}
+                    >
+                      <option value="ALL">All states</option>
+                      {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
 
                   {/* Recommended */}
@@ -394,17 +374,16 @@ function FeedInner() {
                   {/* Cost range */}
                   <div className="mb-4">
                     <div className="text-xs font-semibold text-gray-600 mb-2">Cost range (A$)</div>
-                    <div className="flex items-center gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <input
-                        className="w-28 rounded-xl border px-3 py-2 text-sm"
+                        className="rounded-xl border px-3 py-2 text-sm"
                         placeholder="Min"
                         inputMode="numeric"
                         value={minCost}
                         onChange={(e) => setMinCost(e.target.value.replace(/[^\d]/g, ""))}
                       />
-                      <span className="text-gray-500">–</span>
                       <input
-                        className="w-28 rounded-xl border px-3 py-2 text-sm"
+                        className="rounded-xl border px-3 py-2 text-sm"
                         placeholder="Max"
                         inputMode="numeric"
                         value={maxCost}
@@ -508,7 +487,7 @@ function FeedInner() {
             const completedLabel = formatMonthYear(j.done_at);
 
             // MOBILE: link card
-            if (!isDesktop) {
+            if (!useIsDesktop()) { // small helper to avoid stale isDesktop during render
               return (
                 <Link
                   key={j.id}
@@ -632,33 +611,17 @@ function FeedInner() {
 
             {/* content */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-              {/* State */}
+              {/* State (select) */}
               <div>
                 <div className="text-xs font-semibold text-gray-600 mb-2">State</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="inline-flex items-center gap-3 text-base py-2">
-                    <input
-                      type="radio"
-                      name="m-state"
-                      className="h-5 w-5"
-                      checked={stateFilter === "ALL"}
-                      onChange={() => setStateFilter("ALL")}
-                    />
-                    All
-                  </label>
-                  {STATES.map((s) => (
-                    <label key={s} className="inline-flex items-center gap-3 text-base py-2">
-                      <input
-                        type="radio"
-                        name="m-state"
-                        className="h-5 w-5"
-                        checked={stateFilter === s}
-                        onChange={() => setStateFilter(s)}
-                      />
-                      {s}
-                    </label>
-                  ))}
-                </div>
+                <select
+                  className="w-full rounded-xl border px-3 py-3 text-base"
+                  value={stateFilter}
+                  onChange={(e) => setStateFilter(e.target.value)}
+                >
+                  <option value="ALL">All states</option>
+                  {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
 
               {/* Recommended */}
@@ -674,20 +637,19 @@ function FeedInner() {
                 </label>
               </div>
 
-              {/* Cost range */}
+              {/* Cost range (stacked, full width) */}
               <div>
                 <div className="text-xs font-semibold text-gray-600 mb-2">Cost range (A$)</div>
-                <div className="flex items-center gap-3">
+                <div className="space-y-3">
                   <input
-                    className="flex-1 rounded-xl border px-3 py-3 text-base"
+                    className="w-full rounded-xl border px-3 py-3 text-base"
                     placeholder="Min"
                     inputMode="numeric"
                     value={minCost}
                     onChange={(e) => setMinCost(e.target.value.replace(/[^\d]/g, ""))}
                   />
-                  <span className="text-gray-500">–</span>
                   <input
-                    className="flex-1 rounded-xl border px-3 py-3 text-base"
+                    className="w-full rounded-xl border px-3 py-3 text-base"
                     placeholder="Max"
                     inputMode="numeric"
                     value={maxCost}
@@ -715,9 +677,7 @@ function FeedInner() {
             {/* footer */}
             <div className="sticky bottom-0 border-t bg-white p-4 space-y-3">
               <button
-                onClick={() => {
-                  setFiltersOpen(false);
-                }}
+                onClick={() => setFiltersOpen(false)}
                 className="w-full rounded-xl bg-gray-900 py-3 text-white text-base font-medium"
               >
                 Apply filters
