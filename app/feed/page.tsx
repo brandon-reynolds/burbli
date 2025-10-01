@@ -78,7 +78,7 @@ function FeedInner() {
     return all.filter((j) => {
       const okQ =
         !s ||
-        [j.title, j.suburb, j.business_name, String(j.postcode)]
+        [j.title, j.suburb, j.state, j.business_name]
           .map(v => (v ?? "").toString().toLowerCase())
           .some(v => v.includes(s));
       const okS = stateFilter === "ALL" || j.state === stateFilter;
@@ -100,7 +100,7 @@ function FeedInner() {
         <div className="flex items-center gap-3 flex-wrap">
           <input
             className="flex-1 min-w-[260px] rounded-xl border p-3"
-            placeholder="Search by title, business, suburb or postcode"
+            placeholder="Search by title, business, suburb or state"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -152,7 +152,7 @@ function FeedInner() {
         ) : (
           filtered.map((j) => {
             const active = selected?.id === j.id;
-            const location = [j.suburb, j.state, j.postcode].filter(Boolean).join(", ");
+            const location = [j.suburb, j.state].filter(Boolean).join(", ");
             return (
               <button
                 key={j.id}
