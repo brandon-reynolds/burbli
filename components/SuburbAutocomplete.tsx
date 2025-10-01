@@ -21,39 +21,41 @@ type Props = {
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
-/** Extract suburb/state/postcode reliably from a Mapbox feature (AU only). */
+/** Small fetch helper */
+async function geocode(endpoint: string, params: Record<string, string>) {
+  const url = new URL(endpoint);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) throw new Error("geocode error");
+  return res.json();
+}
+
+/** Extract suburb/state/postcode from a Mapbox feature (AU). */
 function parseAUFeature(f: any): { suburb: string | null; state: string | null; postcode: string | null } {
   const ctx: any[] = Array.isArray(f?.context) ? f.context : [];
   const getCtx = (prefix: string) => ctx.find((c) => typeof c?.id === "string" && c.id.startsWith(prefix));
 
   const region = getCtx("region");
-  const placeInCtx = getCtx("place") ?? getCtx("locality");
-  const postcodeInCtx = getCtx("postcode");
+  const placeCtx = getCtx("place") ?? getCtx("locality");
+  const postcodeCtx = getCtx("postcode");
 
-  // State: prefer region.short_code AU-XX, else region.text uppercased
+  // State: prefer region.short_code AU-XX
   let state: string | null = null;
   const sc = region?.short_code as string | undefined;
   if (sc && /^AU-/.test(sc)) state = sc.slice(3).toUpperCase();
   else if (region?.text) state = String(region.text).toUpperCase();
 
-  // Suburb: if feature IS a place/locality, use its text; if it IS a postcode, use the place/locality from context
-  const isPlace = Array.isArray(f?.place_type) && (f.place_type.includes("place") || f.place_type.includes("locality"));
-  const isPostcode = Array.isArray(f?.place_type) && f.place_type.includes("postcode");
+  const placeType: string[] = Array.isArray(f?.place_type) ? f.place_type : [];
+  const isPlaceLike = placeType.includes("place") || placeType.includes("locality");
+  const isPostcode = placeType.includes("postcode");
 
   let suburb: string | null = null;
-  if (isPlace) {
-    suburb = f?.text ?? null;
-  } else if (isPostcode) {
-    suburb = placeInCtx?.text ?? null;
-  } else {
-    // Fallback: sometimes "place" is given as "text" even if primary type is "district" etc.
-    suburb = (placeInCtx?.text ?? f?.text) ?? null;
-  }
+  if (isPlaceLike) suburb = f?.text ?? null;
+  else if (isPostcode) suburb = placeCtx?.text ?? null;
+  else suburb = (placeCtx?.text ?? f?.text) ?? null;
 
-  // Postcode: prefer explicit postcode in context, else properties.postcode,
-  // else if feature itself is a postcode, its text is that postcode.
   let postcode: string | null =
-    (postcodeInCtx?.text as string | undefined) ??
+    (postcodeCtx?.text as string | undefined) ??
     (f?.properties?.postcode as string | undefined) ??
     (isPostcode ? (f?.text as string | undefined) : undefined) ??
     null;
@@ -61,10 +63,68 @@ function parseAUFeature(f: any): { suburb: string | null; state: string | null; 
   return { suburb, state, postcode };
 }
 
-/** Build "Suburb, STATE POSTCODE" from pieces (omit blanks gracefully). */
 function buildLabel(suburb: string | null, state: string | null, postcode: string | null) {
   const left = [suburb, state].filter(Boolean).join(", ");
   return left + (postcode ? ` ${postcode}` : "");
+}
+
+/** Get the nearest postcode digits around a lon/lat. */
+async function postcodeNear([lon, lat]: [number, number]): Promise<string | null> {
+  const json = await geocode(
+    `https://api.mapbox.com/geocoding/v5/mapbox.places/postcode.json`,
+    {
+      access_token: MAPBOX_TOKEN,
+      country: "AU",
+      language: "en",
+      types: "postcode",
+      proximity: `${lon},${lat}`,
+      limit: "1",
+      autocomplete: "true",
+    }
+  );
+  const f = json?.features?.[0];
+  if (!f) return null;
+  const pt = Array.isArray(f?.place_type) && f.place_type.includes("postcode");
+  return pt ? String(f?.text ?? "") || null : null;
+}
+
+/** Find places near a postcode feature’s center and return a few labelled options. */
+async function placesForPostcode(fPostcode: any, limit = 6): Promise<Picked[]> {
+  const center = fPostcode?.center as [number, number] | undefined;
+  if (!center) return [];
+
+  // State from the postcode feature (via context)
+  const { state } = parseAUFeature(fPostcode);
+  const digits = String(fPostcode?.text ?? "");
+
+  const json = await geocode(
+    `https://api.mapbox.com/geocoding/v5/mapbox.places/place.json`,
+    {
+      access_token: MAPBOX_TOKEN,
+      country: "AU",
+      language: "en",
+      types: "place,locality",
+      proximity: `${center[0]},${center[1]}`,
+      limit: String(limit),
+      autocomplete: "true",
+    }
+  );
+
+  const out: Picked[] = (json?.features ?? []).map((pf: any) => {
+    const parsed = parseAUFeature(pf);
+    // Build label with the known postcode digits from the original feature
+    const label = buildLabel(parsed.suburb, parsed.state ?? state, digits) || (pf?.place_name as string);
+    return {
+      label,
+      suburb: parsed.suburb ?? null,
+      state: (parsed.state ?? state) ?? null,
+      postcode: digits || null,
+    };
+  });
+
+  // de-dup by label
+  const seen = new Set<string>();
+  return out.filter((i) => (seen.has(i.label) ? false : (seen.add(i.label), true)));
 }
 
 export default function SuburbAutocomplete({
@@ -97,7 +157,7 @@ export default function SuburbAutocomplete({
     return () => document.removeEventListener("click", onDoc);
   }, []);
 
-  // Debounced search (first letter onward)
+  // Debounced search
   useEffect(() => {
     if (!MAPBOX_TOKEN) return;
 
@@ -111,40 +171,93 @@ export default function SuburbAutocomplete({
     const t = setTimeout(async () => {
       try {
         setLoading(true);
-        const url = new URL(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`);
-        url.searchParams.set("access_token", MAPBOX_TOKEN);
-        url.searchParams.set("autocomplete", "true");
-        url.searchParams.set("country", "AU");
-        url.searchParams.set("language", "en");
-        // Include postcode so "3076" returns postcode hits, plus place/locality
-        url.searchParams.set("types", "postcode,place,locality");
-        url.searchParams.set("limit", "8");
 
-        const res = await fetch(url.toString(), { cache: "no-store" });
-        const json = await res.json();
+        // If input is exactly a 4-digit postcode, run the postcode-first flow
+        if (/^\d{4}$/.test(q)) {
+          const pcJson = await geocode(
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`,
+            {
+              access_token: MAPBOX_TOKEN,
+              country: "AU",
+              language: "en",
+              types: "postcode",
+              limit: "1",
+              autocomplete: "true",
+            }
+          );
 
-        const mapped: Picked[] = (json?.features ?? []).map((f: any) => {
-          const { suburb, state, postcode } = parseAUFeature(f);
-          const label = buildLabel(suburb, state, postcode) || (f?.place_name as string);
+          const pcFeature = pcJson?.features?.[0];
+          if (pcFeature) {
+            const options = await placesForPostcode(pcFeature, 6);
+            setItems(options);
+            setActiveIndex(options.length ? 0 : -1);
+            setOpen(isFocused && options.length > 0);
+            return;
+          }
+          // fall through to generic search if nothing found
+        }
+
+        // Generic search: place/locality/postcode together
+        const base = await geocode(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`,
+          {
+            access_token: MAPBOX_TOKEN,
+            country: "AU",
+            language: "en",
+            types: "place,locality,postcode",
+            limit: "8",
+            autocomplete: "true",
+          }
+        );
+
+        const feats: any[] = base?.features ?? [];
+        // Prefer place/locality results, keep postcode as supplement
+        const placeFirst = feats.sort((a, b) => {
+          const aPlace = a.place_type?.includes("place") || a.place_type?.includes("locality") ? 0 : 1;
+          const bPlace = b.place_type?.includes("place") || b.place_type?.includes("locality") ? 0 : 1;
+          return aPlace - bPlace;
+        });
+
+        // Map initial results
+        const prelim: {
+          f: any;
+          parsed: { suburb: string | null; state: string | null; postcode: string | null };
+          center?: [number, number];
+        }[] = placeFirst.map((f) => ({
+          f,
+          parsed: parseAUFeature(f),
+          center: Array.isArray(f?.center) ? (f.center as [number, number]) : undefined,
+        }));
+
+        // For top N items missing postcode, fetch 1 postcode near center
+        const ENRICH_N = 5;
+        await Promise.all(
+          prelim.slice(0, ENRICH_N).map(async (row) => {
+            if (!row.parsed.postcode && row.center) {
+              const pc = await postcodeNear(row.center);
+              if (pc) row.parsed.postcode = pc;
+            }
+          })
+        );
+
+        // Build final list with labels
+        const mapped: Picked[] = prelim.map(({ parsed, f }) => {
+          const label = buildLabel(parsed.suburb, parsed.state, parsed.postcode) || (f?.place_name as string);
           return {
             label,
-            suburb: suburb ?? null,
-            state: state ?? null,
-            postcode: postcode ?? null,
+            suburb: parsed.suburb ?? null,
+            state: parsed.state ?? null,
+            postcode: parsed.postcode ?? null,
           };
         });
 
-        // De-dup by label (keep first occurrence)
+        // De-dup by label
         const seen = new Set<string>();
-        const unique = mapped.filter((i) => {
-          if (seen.has(i.label)) return false;
-          seen.add(i.label);
-          return true;
-        });
+        const unique = mapped.filter((i) => (seen.has(i.label) ? false : (seen.add(i.label), true)));
 
         setItems(unique);
         setActiveIndex(unique.length ? 0 : -1);
-        setOpen(isFocused && unique.length > 0); // only open if input is focused
+        setOpen(isFocused && unique.length > 0);
       } catch {
         setItems([]);
         setOpen(false);
@@ -162,7 +275,6 @@ export default function SuburbAutocomplete({
     setQuery(it.label);   // show full "Epping, VIC 3076"
     setOpen(false);
     onPick(it);
-    // Blur to prevent immediate reopen on focus handlers
     setTimeout(() => inputRef.current?.blur(), 0);
   }
 
@@ -188,7 +300,6 @@ export default function SuburbAutocomplete({
   }
 
   function onBlur() {
-    // Slight delay to allow click on an option
     setTimeout(() => {
       setIsFocused(false);
       if (
@@ -217,9 +328,7 @@ export default function SuburbAutocomplete({
           role="combobox"
           disabled={disabled}
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-          }}
+          onChange={(e) => setQuery(e.target.value)}
           onFocus={onFocus}
           onBlur={onBlur}
           onKeyDown={onKeyDown}
@@ -227,7 +336,6 @@ export default function SuburbAutocomplete({
           className="w-full rounded-xl border pl-3 pr-9 py-2 md:py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
         />
 
-        {/* Inline clear “✕” inside the input */}
         {query && (
           <button
             type="button"
@@ -248,7 +356,6 @@ export default function SuburbAutocomplete({
         )}
       </div>
 
-      {/* Dropdown */}
       {open && (
         <div
           role="listbox"
@@ -271,7 +378,6 @@ export default function SuburbAutocomplete({
               style={{ minHeight: 44 }}
               title={it.label}
             >
-              {/* Always show the single combined label */}
               <span className="truncate">{it.label}</span>
             </button>
           ))}
