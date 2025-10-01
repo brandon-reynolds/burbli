@@ -31,7 +31,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
   const [title, setTitle] = useState(initialJob?.title ?? "");
   const [business, setBusiness] = useState(initialJob?.business_name ?? "");
 
-  // Location (state optional, postcode optional -> stored as 0 if missing due to DB NOT NULL)
+  // Location (state optional; postcode optional -> fallback 9999 to satisfy DB check)
   const [suburb, setSuburb] = useState(initialJob?.suburb ?? "");
   const [stateA, setStateA] = useState(initialJob?.state ?? "");
   const [postcode, setPostcode] = useState(initialJob?.postcode ? String(initialJob.postcode) : "");
@@ -80,15 +80,15 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
     const trimmedCost = costApprox.replace(/[^\d]/g, "").trim();
     const costNumber = trimmedCost ? parseInt(trimmedCost, 10) : null;
 
-    // Postcode fallback: DB column is NOT NULL, so send 0 when we don't have a valid 4-digit AU postcode
-    const pc = /^\d{4}$/.test(postcode) ? parseInt(postcode, 10) : 0;
+    // ✅ Postcode fallback that passes jobs_postcode_check (must look like AU postcode)
+    const pc = /^\d{4}$/.test(postcode) ? parseInt(postcode, 10) : 9999;
 
     const base: any = {
       title: title.trim(),
       business_name: business.trim(),
       suburb: suburb.trim(),
       state: stateA.trim() || null, // optional
-      postcode: pc,                 // never null now
+      postcode: pc,                 // never null; 9999 if unknown
       recommend,
       notes: notes.trim() || null,
       cost_type: costNumber != null ? "exact" : "na",
@@ -127,7 +127,11 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-2xl border bg-white p-4 md:p-6 space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      autoComplete="off"            // suppress iOS autofill
+      className="rounded-2xl border bg-white p-4 md:p-6 space-y-4"
+    >
       <h2 className="text-xl font-semibold">{initialJob ? "Edit project" : "Share a project"}</h2>
 
       {/* Title */}
@@ -140,11 +144,12 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
           placeholder="e.g. Replace garage door motor"
           autoComplete="off"
           autoCorrect="off"
+          autoCapitalize="none"
           spellCheck={false}
         />
       </div>
 
-      {/* Business (disable predictive/autofill) */}
+      {/* Business (hardened to avoid predictions/autofill) */}
       <div>
         <label className="block text-sm font-medium">Who did it *</label>
         <input
@@ -154,8 +159,12 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
           placeholder="Business name"
           autoComplete="off"
           autoCorrect="off"
+          autoCapitalize="none"
           spellCheck={false}
+          aria-autocomplete="none"
+          data-form-type="other"
           inputMode="text"
+          name="business_no_autofill"
         />
       </div>
 
@@ -173,8 +182,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
           onBlurAutoFillEmpty
           className="mt-1"
         />
-        {/* tiny hint only */}
-        <p className="mt-1 text-xs text-gray-500">We’ll fill state and postcode when available.</p>
+        <p className="mt-1 text-xs text-gray-500">We’ll fill state and postcode if available.</p>
       </div>
 
       {/* Recommendation */}
