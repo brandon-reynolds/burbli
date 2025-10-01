@@ -21,6 +21,52 @@ type Props = {
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
+/** Extract suburb/state/postcode reliably from a Mapbox feature (AU only). */
+function parseAUFeature(f: any): { suburb: string | null; state: string | null; postcode: string | null } {
+  const ctx: any[] = Array.isArray(f?.context) ? f.context : [];
+  const getCtx = (prefix: string) => ctx.find((c) => typeof c?.id === "string" && c.id.startsWith(prefix));
+
+  const region = getCtx("region");
+  const placeInCtx = getCtx("place") ?? getCtx("locality");
+  const postcodeInCtx = getCtx("postcode");
+
+  // State: prefer region.short_code AU-XX, else region.text uppercased
+  let state: string | null = null;
+  const sc = region?.short_code as string | undefined;
+  if (sc && /^AU-/.test(sc)) state = sc.slice(3).toUpperCase();
+  else if (region?.text) state = String(region.text).toUpperCase();
+
+  // Suburb: if feature IS a place/locality, use its text; if it IS a postcode, use the place/locality from context
+  const isPlace = Array.isArray(f?.place_type) && (f.place_type.includes("place") || f.place_type.includes("locality"));
+  const isPostcode = Array.isArray(f?.place_type) && f.place_type.includes("postcode");
+
+  let suburb: string | null = null;
+  if (isPlace) {
+    suburb = f?.text ?? null;
+  } else if (isPostcode) {
+    suburb = placeInCtx?.text ?? null;
+  } else {
+    // Fallback: sometimes "place" is given as "text" even if primary type is "district" etc.
+    suburb = (placeInCtx?.text ?? f?.text) ?? null;
+  }
+
+  // Postcode: prefer explicit postcode in context, else properties.postcode,
+  // else if feature itself is a postcode, its text is that postcode.
+  let postcode: string | null =
+    (postcodeInCtx?.text as string | undefined) ??
+    (f?.properties?.postcode as string | undefined) ??
+    (isPostcode ? (f?.text as string | undefined) : undefined) ??
+    null;
+
+  return { suburb, state, postcode };
+}
+
+/** Build "Suburb, STATE POSTCODE" from pieces (omit blanks gracefully). */
+function buildLabel(suburb: string | null, state: string | null, postcode: string | null) {
+  const left = [suburb, state].filter(Boolean).join(", ");
+  return left + (postcode ? ` ${postcode}` : "");
+}
+
 export default function SuburbAutocomplete({
   label = "",
   placeholder = "Start typing a suburb…",
@@ -70,39 +116,27 @@ export default function SuburbAutocomplete({
         url.searchParams.set("autocomplete", "true");
         url.searchParams.set("country", "AU");
         url.searchParams.set("language", "en");
-        url.searchParams.set("types", "place,locality,postcode");
+        // Include postcode so "3076" returns postcode hits, plus place/locality
+        url.searchParams.set("types", "postcode,place,locality");
         url.searchParams.set("limit", "8");
 
         const res = await fetch(url.toString(), { cache: "no-store" });
         const json = await res.json();
 
-        const next: Picked[] = (json?.features ?? []).map((f: any) => {
-          const suburb = (f?.text ?? null) as string | null;
-
-          const ctx: any[] = Array.isArray(f?.context) ? f.context : [];
-          const region = ctx.find((c) => typeof c.id === "string" && c.id.startsWith("region"));
-          const postcode = ctx.find((c) => typeof c.id === "string" && c.id.startsWith("postcode"));
-
-          let state: string | null = null;
-          const sc = region?.short_code as string | undefined;
-          if (sc && /^AU-/.test(sc)) state = sc.slice(3).toUpperCase();
-          else if (region?.text) state = String(region.text).toUpperCase();
-
-          const pc = postcode?.text ? String(postcode.text) : (f?.properties?.postcode ?? null);
-
-          // Build "Suburb, STATE POSTCODE" (omit blanks gracefully)
-          const labelBits = [suburb, state].filter(Boolean).join(", ") + (pc ? ` ${pc}` : "");
+        const mapped: Picked[] = (json?.features ?? []).map((f: any) => {
+          const { suburb, state, postcode } = parseAUFeature(f);
+          const label = buildLabel(suburb, state, postcode) || (f?.place_name as string);
           return {
-            label: labelBits || (f.place_name as string),
-            suburb,
-            state,
-            postcode: pc ?? null,
-          } as Picked;
+            label,
+            suburb: suburb ?? null,
+            state: state ?? null,
+            postcode: postcode ?? null,
+          };
         });
 
-        // De-dup by label
+        // De-dup by label (keep first occurrence)
         const seen = new Set<string>();
-        const unique = next.filter((i) => {
+        const unique = mapped.filter((i) => {
           if (seen.has(i.label)) return false;
           seen.add(i.label);
           return true;
@@ -237,6 +271,7 @@ export default function SuburbAutocomplete({
               style={{ minHeight: 44 }}
               title={it.label}
             >
+              {/* Always show the single combined label */}
               <span className="truncate">{it.label}</span>
             </button>
           ))}
