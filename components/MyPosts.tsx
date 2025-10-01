@@ -87,7 +87,7 @@ export default function MyPosts() {
 
       <div className="grid gap-3">
         {jobs.map((j) => {
-          const location = [j.suburb, j.state, j.postcode].filter(Boolean).join(", ");
+          const location = [j.suburb, j.state].filter(Boolean).join(", ");
           return (
             <Link
               key={j.id}
