@@ -93,6 +93,11 @@ const Icon = {
       <path d="M18 6L6 18M6 6l12 12" />
     </svg>
   ),
+  ChevronLeft: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M15 6l-6 6 6 6" />
+    </svg>
+  ),
 };
 
 function IconRow({
@@ -148,19 +153,20 @@ function FeedInner() {
 
   const [selected, setSelected] = useState<Job | null>(null);
 
-  // Filters popover
+  // Filters popover / sheet
   const [filtersOpen, setFiltersOpen] = useState(false);
   const popRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (!el) return;
-      if (!popRef.current) return;
-      if (!popRef.current.contains(el)) setFiltersOpen(false);
+      if (isDesktop) {
+        const el = e.target as HTMLElement | null;
+        if (!el || !popRef.current) return;
+        if (!popRef.current.contains(el)) setFiltersOpen(false);
+      }
     };
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
-  }, []);
+  }, [isDesktop]);
 
   useEffect(() => {
     (async () => {
@@ -326,7 +332,8 @@ function FeedInner() {
               onChange={(e) => setQ(e.target.value)}
             />
 
-            <div className="relative" ref={popRef}>
+            {/* Filters button */}
+            <div className={isDesktop ? "relative" : ""} ref={popRef}>
               <button
                 onClick={() => setFiltersOpen((v) => !v)}
                 className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
@@ -339,16 +346,18 @@ function FeedInner() {
                 </span>
               </button>
 
-              {filtersOpen && (
-                <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border bg-white p-3 shadow-lg">
+              {/* Desktop popover */}
+              {filtersOpen && isDesktop && (
+                <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border bg-white p-4 shadow-lg">
                   {/* State */}
-                  <div className="mb-3">
-                    <div className="text-xs font-semibold text-gray-600 mb-1">State</div>
+                  <div className="mb-4">
+                    <div className="text-xs font-semibold text-gray-600 mb-2">State</div>
                     <div className="grid grid-cols-3 gap-2">
                       <label className="inline-flex items-center gap-2 text-sm">
                         <input
                           type="radio"
                           name="state"
+                          className="h-4 w-4"
                           checked={stateFilter === "ALL"}
                           onChange={() => setStateFilter("ALL")}
                         />
@@ -359,6 +368,7 @@ function FeedInner() {
                           <input
                             type="radio"
                             name="state"
+                            className="h-4 w-4"
                             checked={stateFilter === s}
                             onChange={() => setStateFilter(s)}
                           />
@@ -369,10 +379,11 @@ function FeedInner() {
                   </div>
 
                   {/* Recommended */}
-                  <div className="mb-3">
+                  <div className="mb-4">
                     <label className="inline-flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
+                        className="h-4 w-4"
                         checked={onlyRecommended}
                         onChange={(e) => setOnlyRecommended(e.target.checked)}
                       />
@@ -381,11 +392,11 @@ function FeedInner() {
                   </div>
 
                   {/* Cost range */}
-                  <div className="mb-3">
-                    <div className="text-xs font-semibold text-gray-600 mb-1">Cost range (A$)</div>
+                  <div className="mb-4">
+                    <div className="text-xs font-semibold text-gray-600 mb-2">Cost range (A$)</div>
                     <div className="flex items-center gap-2">
                       <input
-                        className="w-24 rounded-xl border px-2 py-1 text-sm"
+                        className="w-28 rounded-xl border px-3 py-2 text-sm"
                         placeholder="Min"
                         inputMode="numeric"
                         value={minCost}
@@ -393,7 +404,7 @@ function FeedInner() {
                       />
                       <span className="text-gray-500">–</span>
                       <input
-                        className="w-24 rounded-xl border px-2 py-1 text-sm"
+                        className="w-28 rounded-xl border px-3 py-2 text-sm"
                         placeholder="Max"
                         inputMode="numeric"
                         value={maxCost}
@@ -403,10 +414,10 @@ function FeedInner() {
                   </div>
 
                   {/* Year */}
-                  <div className="mb-3">
-                    <div className="text-xs font-semibold text-gray-600 mb-1">Completed year</div>
+                  <div className="mb-4">
+                    <div className="text-xs font-semibold text-gray-600 mb-2">Completed year</div>
                     <select
-                      className="w-full rounded-xl border px-2 py-2 text-sm"
+                      className="w-full rounded-xl border px-3 py-2 text-sm"
                       value={yearFilter}
                       onChange={(e) => setYearFilter(e.target.value)}
                     >
@@ -417,7 +428,7 @@ function FeedInner() {
                     </select>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center justify-between">
                     <button
                       onClick={() => {
                         setStateFilter("ALL");
@@ -464,7 +475,7 @@ function FeedInner() {
               {activePills.map((p, i) => (
                 <span
                   key={i}
-                  className="inline-flex items-center gap-1 rounded-full border bg-gray-50 px-2.5 py-1 text-xs text-gray-700"
+                  className="inline-flex items-center gap-1 rounded-full border bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700"
                 >
                   {p.label}
                   <button
@@ -597,6 +608,136 @@ function FeedInner() {
           )}
         </div>
       </div>
+
+      {/* MOBILE FILTER SHEET */}
+      {filtersOpen && !isDesktop && (
+        <div className="fixed inset-0 z-40">
+          {/* backdrop */}
+          <div className="absolute inset-0 bg-black/40" onClick={() => setFiltersOpen(false)} />
+
+          {/* sheet */}
+          <div className="absolute inset-0 bg-white flex flex-col">
+            {/* header */}
+            <div className="sticky top-0 z-10 border-b bg-white px-4 py-3 flex items-center justify-between">
+              <button
+                onClick={() => setFiltersOpen(false)}
+                className="inline-flex items-center gap-1 rounded-xl border px-3 py-2 text-sm"
+              >
+                <Icon.ChevronLeft className="h-4 w-4" />
+                Back
+              </button>
+              <div className="text-sm text-gray-600">Filters</div>
+              <div className="w-[68px]" />
+            </div>
+
+            {/* content */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+              {/* State */}
+              <div>
+                <div className="text-xs font-semibold text-gray-600 mb-2">State</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="inline-flex items-center gap-3 text-base py-2">
+                    <input
+                      type="radio"
+                      name="m-state"
+                      className="h-5 w-5"
+                      checked={stateFilter === "ALL"}
+                      onChange={() => setStateFilter("ALL")}
+                    />
+                    All
+                  </label>
+                  {STATES.map((s) => (
+                    <label key={s} className="inline-flex items-center gap-3 text-base py-2">
+                      <input
+                        type="radio"
+                        name="m-state"
+                        className="h-5 w-5"
+                        checked={stateFilter === s}
+                        onChange={() => setStateFilter(s)}
+                      />
+                      {s}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recommended */}
+              <div>
+                <label className="inline-flex items-center gap-3 text-base py-2">
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5"
+                    checked={onlyRecommended}
+                    onChange={(e) => setOnlyRecommended(e.target.checked)}
+                  />
+                  Recommended only
+                </label>
+              </div>
+
+              {/* Cost range */}
+              <div>
+                <div className="text-xs font-semibold text-gray-600 mb-2">Cost range (A$)</div>
+                <div className="flex items-center gap-3">
+                  <input
+                    className="flex-1 rounded-xl border px-3 py-3 text-base"
+                    placeholder="Min"
+                    inputMode="numeric"
+                    value={minCost}
+                    onChange={(e) => setMinCost(e.target.value.replace(/[^\d]/g, ""))}
+                  />
+                  <span className="text-gray-500">–</span>
+                  <input
+                    className="flex-1 rounded-xl border px-3 py-3 text-base"
+                    placeholder="Max"
+                    inputMode="numeric"
+                    value={maxCost}
+                    onChange={(e) => setMaxCost(e.target.value.replace(/[^\d]/g, ""))}
+                  />
+                </div>
+              </div>
+
+              {/* Year */}
+              <div>
+                <div className="text-xs font-semibold text-gray-600 mb-2">Completed year</div>
+                <select
+                  className="w-full rounded-xl border px-3 py-3 text-base"
+                  value={yearFilter}
+                  onChange={(e) => setYearFilter(e.target.value)}
+                >
+                  <option value="ALL">All years</option>
+                  {yearsAvailable.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* footer */}
+            <div className="sticky bottom-0 border-t bg-white p-4 space-y-3">
+              <button
+                onClick={() => {
+                  setFiltersOpen(false);
+                }}
+                className="w-full rounded-xl bg-gray-900 py-3 text-white text-base font-medium"
+              >
+                Apply filters
+              </button>
+              <button
+                onClick={() => {
+                  setStateFilter("ALL");
+                  setOnlyRecommended(false);
+                  setMinCost("");
+                  setMaxCost("");
+                  setYearFilter("ALL");
+                }}
+                className="w-full rounded-xl border py-3 text-base"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
