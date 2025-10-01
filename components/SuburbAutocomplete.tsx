@@ -1,155 +1,218 @@
+// components/SuburbAutocomplete.tsx
 "use client";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 
-export type PickedSuburb = {
-  suburb: string;
-  state: "VIC"|"NSW"|"QLD"|"SA"|"WA"|"TAS"|"ACT"|"NT";
-  postcode: string;
+type Picked = {
+  label: string;          // e.g., "Epping, VIC 3076"
+  suburb: string | null;
+  state: string | null;   // VIC / NSW / …
+  postcode: string | null;
 };
 
-type Locality = PickedSuburb;
+type Props = {
+  label?: string;                     // initial display text
+  placeholder?: string;
+  disabled?: boolean;
+  onPick: (p: Picked) => void;        // send chosen parts to parent
+  onBlurAutoFillEmpty?: boolean;      // if true and there is a top result, pick it on blur
+  className?: string;                 // extra classes for the wrapper
+};
 
-function norm(s: string) {
-  return s.normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
-}
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
 export default function SuburbAutocomplete({
-  value,
-  onPicked,
-  placeholder = "Start typing a suburb (e.g. Epping)…",
-  max = 12,
-}: {
-  value: PickedSuburb | null;
-  onPicked: (v: PickedSuburb | null) => void;
-  placeholder?: string;
-  max?: number;
-}) {
-  const [q, setQ] = useState("");
+  label = "",
+  placeholder = "Start typing a suburb…",
+  disabled = false,
+  onPick,
+  onBlurAutoFillEmpty = false,
+  className = "",
+}: Props) {
+  const [query, setQuery] = useState(label);
   const [open, setOpen] = useState(false);
-  const [data, setData] = useState<Locality[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<Picked[]>([]);
+  const [activeIndex, setActiveIndex] = useState<number>(-1);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const listId = useMemo(() => `suburb-list-${Math.random().toString(36).slice(2)}`, []);
 
-  // Close menu on outside click
+  // Close on outside click
   useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (!boxRef.current) return;
-      if (!boxRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    const onDoc = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (!el || !rootRef.current) return;
+      if (!rootRef.current.contains(el)) setOpen(false);
+    };
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
   }, []);
 
-  // Load static dataset (served from /public)
+  // Debounced search (first letter onward)
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch("/au_localities.min.json", { cache: "force-cache" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as Locality[];
-        if (alive) setData(json);
-      } catch (e: any) {
-        if (alive) setErr(e?.message ?? "Failed to load localities");
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
+    if (!MAPBOX_TOKEN) return;
 
-  // Reflect selected value in input
-  useEffect(() => {
-    if (value) setQ(`${value.suburb}, ${value.state} ${value.postcode}`);
-    else setQ("");
-  }, [value]);
-
-  const results = useMemo(() => {
-    if (!data || !q || value) return [];
-    const nq = norm(q);
-    const hits = data.filter((d) => {
-      const key = `${d.suburb}, ${d.state} ${d.postcode}`;
-      return norm(d.suburb).startsWith(nq) || norm(key).includes(nq);
-    });
-    return hits.slice(0, max);
-  }, [data, q, value, max]);
-
-  // Keep the list open while typing
-  useEffect(() => {
-    if (document.activeElement === inputRef.current && !value) {
-      setOpen(results.length > 0);
-    }
-  }, [results.length, value]);
-
-  function choose(loc: Locality) {
-    onPicked(loc);
-    setOpen(false);
-  }
-
-  // 🚀 Auto-pick immediately when:
-  //  - exact match typed (e.g. "Epping, VIC 3076" or "Epping")
-  //  - OR only a single result remains (after 3+ chars)
-  useEffect(() => {
-    if (value) return; // already chosen
-    if (!q || results.length === 0) return;
-    const nq = norm(q);
-    const exact =
-      results.find(r => norm(`${r.suburb}, ${r.state} ${r.postcode}`) === nq) ||
-      results.find(r => norm(r.suburb) === nq);
-    if (exact) {
-      choose(exact);
+    const q = query.trim();
+    if (!q) {
+      setItems([]);
       return;
     }
-    if (results.length === 1 && nq.length >= 3) {
-      choose(results[0]);
+
+    const t = setTimeout(async () => {
+      try {
+        setLoading(true);
+        const url = new URL(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`);
+        url.searchParams.set("access_token", MAPBOX_TOKEN);
+        url.searchParams.set("autocomplete", "true");
+        url.searchParams.set("country", "AU");                 // AU-only
+        url.searchParams.set("language", "en");
+        url.searchParams.set("types", "place,locality,postcode"); // suburb/locality/postcode
+        url.searchParams.set("limit", "8");
+
+        const res = await fetch(url.toString(), { cache: "no-store" });
+        const json = await res.json();
+
+        const next: Picked[] = (json?.features ?? []).map((f: any) => {
+          // Suburb/locality text
+          const suburb = (f?.text ?? null) as string | null;
+
+          // Find region (state) and postcode in the context list
+          const ctx: any[] = Array.isArray(f?.context) ? f.context : [];
+          const region = ctx.find((c) => typeof c.id === "string" && c.id.startsWith("region"));
+          const postcode = ctx.find((c) => typeof c.id === "string" && c.id.startsWith("postcode"));
+
+          // Region short_code typically "AU-VIC" -> take trailing part
+          let state: string | null = null;
+          const sc = region?.short_code as string | undefined;
+          if (sc && /^AU-/.test(sc)) state = sc.slice(3).toUpperCase();
+          else if (region?.text) state = String(region.text).toUpperCase();
+
+          const pc = postcode?.text ? String(postcode.text) : null;
+
+          // Build display label like "Epping, VIC 3076"
+          const bits = [suburb, state, pc].filter(Boolean).join(", ").replace(", ,", ",");
+          return {
+            label: bits || (f.place_name as string),
+            suburb,
+            state,
+            postcode: pc,
+          } as Picked;
+        });
+
+        // De-dup by label
+        const seen = new Set<string>();
+        const unique = next.filter((i) => (seen.has(i.label) ? false : (seen.add(i.label), true)));
+
+        setItems(unique);
+        setActiveIndex(unique.length ? 0 : -1);
+        setOpen(true);
+      } catch (err) {
+        // swallow
+        setItems([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 220); // snappy debounce
+
+    return () => clearTimeout(t);
+  }, [query]);
+
+  function choose(i: number) {
+    const it = items[i];
+    if (!it) return;
+    setQuery(it.label);
+    setOpen(false);
+    onPick(it);
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open || !items.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((v) => (v + 1) % items.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((v) => (v - 1 + items.length) % items.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (activeIndex >= 0) choose(activeIndex);
+    } else if (e.key === "Escape") {
+      setOpen(false);
     }
-  }, [q, results, value]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
+
+  async function onBlur() {
+    // Optionally auto-pick the first when user tabs away
+    if (onBlurAutoFillEmpty && query.trim() && items.length && !items.find(i => i.label === query.trim())) {
+      choose(0);
+    }
+  }
+
+  const emptyState = !loading && query.trim() && items.length === 0;
 
   return (
-    <div ref={boxRef} className="relative">
-      <input
-        ref={inputRef}
-        className="w-full rounded-xl border px-3 py-2"
-        placeholder={placeholder}
-        value={q}
-        onChange={(e) => {
-          onPicked(null);           // clear picked while user edits
-          setQ(e.target.value);
-          setOpen(true);            // show options as you type
-        }}
-        onFocus={() => { if (results.length > 0) setOpen(true); }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && results.length > 0 && !value) {
-            e.preventDefault();
-            choose(results[0]);     // Enter picks the top suggestion
-          }
-          if (e.key === "Escape") setOpen(false);
-        }}
-        autoComplete="off"
-        spellCheck={false}
-      />
+    <div ref={rootRef} className={`relative ${className}`}>
+      <div className="flex items-center gap-2">
+        <input
+          aria-autocomplete="list"
+          aria-controls={listId}
+          aria-expanded={open}
+          role="combobox"
+          disabled={disabled}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => { if (items.length) setOpen(true); }}
+          onKeyDown={onKeyDown}
+          onBlur={onBlur}
+          placeholder={placeholder}
+          className="w-full rounded-xl border px-3 py-2 md:py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => { setQuery(""); setItems([]); setOpen(false); setActiveIndex(-1); }}
+            className="shrink-0 rounded-lg border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+            aria-label="Clear"
+            title="Clear"
+          >
+            Clear
+          </button>
+        )}
+      </div>
 
-      {err && <p className="mt-1 text-xs text-amber-700">{err}</p>}
+      {/* Dropdown */}
+      {open && (
+        <div
+          role="listbox"
+          id={listId}
+          className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border bg-white p-1 shadow-lg"
+        >
+          {loading && (
+            <div className="px-3 py-2 text-sm text-gray-500">Searching…</div>
+          )}
 
-      {open && results.length > 0 && (
-        <div className="absolute z-20 mt-1 w-full rounded-xl border bg-white shadow max-h-72 overflow-auto">
-          {results.map((r) => (
+          {items.map((it, idx) => (
             <button
-              key={`${r.suburb}-${r.state}-${r.postcode}`}
-              className="block w-full text-left px-3 py-2 hover:bg-gray-50"
-              onMouseDown={(e) => e.preventDefault()}   // avoid losing focus before click
-              onClick={() => choose(r)}
+              key={`${it.label}-${idx}`}
+              role="option"
+              aria-selected={idx === activeIndex}
+              onMouseEnter={() => setActiveIndex(idx)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => choose(idx)}
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm ${
+                idx === activeIndex ? "bg-gray-100" : "hover:bg-gray-50"
+              }`}
+              style={{ minHeight: 44 }} // good touch target
             >
-              {r.suburb}, {r.state} {r.postcode}
+              <span className="truncate">{it.label}</span>
             </button>
           ))}
+
+          {emptyState && (
+            <div className="px-3 py-2 text-sm text-gray-500">No matches.</div>
+          )}
         </div>
       )}
-
-      {!value && q && results.length === 0 && !err && (
-        <p className="mt-1 text-xs text-gray-500">No matches yet. Keep typing…</p>
-      )}
-      {!data && !err && <p className="mt-1 text-xs text-gray-500">Loading suburbs…</p>}
-      {/* No "Selected" line — single-field UX */}
     </div>
   );
 }
