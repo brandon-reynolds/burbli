@@ -31,7 +31,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
   const [title, setTitle] = useState(initialJob?.title ?? "");
   const [business, setBusiness] = useState(initialJob?.business_name ?? "");
 
-  // Location (state optional; postcode optional -> fallback 9999 to satisfy DB check)
+  // Location
   const [suburb, setSuburb] = useState(initialJob?.suburb ?? "");
   const [stateA, setStateA] = useState(initialJob?.state ?? "");
   const [postcode, setPostcode] = useState(initialJob?.postcode ? String(initialJob.postcode) : "");
@@ -80,15 +80,15 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
     const trimmedCost = costApprox.replace(/[^\d]/g, "").trim();
     const costNumber = trimmedCost ? parseInt(trimmedCost, 10) : null;
 
-    // ✅ Postcode fallback that passes jobs_postcode_check (must look like AU postcode)
+    // ✅ Fallback postcode (if empty, set to 9999 to satisfy DB check)
     const pc = /^\d{4}$/.test(postcode) ? parseInt(postcode, 10) : 9999;
 
     const base: any = {
       title: title.trim(),
       business_name: business.trim(),
       suburb: suburb.trim(),
-      state: stateA.trim() || null, // optional
-      postcode: pc,                 // never null; 9999 if unknown
+      state: stateA.trim() || null,
+      postcode: pc,
       recommend,
       notes: notes.trim() || null,
       cost_type: costNumber != null ? "exact" : "na",
@@ -129,7 +129,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
   return (
     <form
       onSubmit={handleSubmit}
-      autoComplete="off"            // suppress iOS autofill
+      autoComplete="off"
       className="rounded-2xl border bg-white p-4 md:p-6 space-y-4"
     >
       <h2 className="text-xl font-semibold">{initialJob ? "Edit project" : "Share a project"}</h2>
@@ -149,7 +149,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
         />
       </div>
 
-      {/* Business (hardened to avoid predictions/autofill) */}
+      {/* Business */}
       <div>
         <label className="block text-sm font-medium">Who did it *</label>
         <input
@@ -168,7 +168,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
         />
       </div>
 
-      {/* Location via Mapbox autocomplete */}
+      {/* Location */}
       <div>
         <label className="block text-sm font-medium">Suburb *</label>
         <SuburbAutocomplete
@@ -179,10 +179,8 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
             setStateA(p.state ?? "");
             setPostcode(p.postcode ?? "");
           }}
-          onBlurAutoFillEmpty
           className="mt-1"
         />
-        <p className="mt-1 text-xs text-gray-500">We’ll fill state and postcode if available.</p>
       </div>
 
       {/* Recommendation */}
@@ -198,7 +196,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
         </div>
       </div>
 
-      {/* Cost (optional) */}
+      {/* Cost */}
       <div>
         <label className="block text-sm font-medium">Approximate cost (optional)</label>
         <div className="mt-1 flex max-w-xs items-center gap-2">
@@ -214,7 +212,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
         </div>
       </div>
 
-      {/* Completed (optional) */}
+      {/* Completed */}
       <div>
         <label className="block text-sm font-medium">Completed (optional)</label>
         <div className="mt-1 grid grid-cols-2 gap-3 max-w-xs">
