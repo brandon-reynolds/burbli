@@ -31,7 +31,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
   const [title, setTitle] = useState(initialJob?.title ?? "");
   const [business, setBusiness] = useState(initialJob?.business_name ?? "");
 
-  // Location stored internally (no separate inputs shown)
+  // Location stored internally (postcode optional, state now optional too)
   const [suburb, setSuburb] = useState(initialJob?.suburb ?? "");
   const [stateA, setStateA] = useState(initialJob?.state ?? "");
   const [postcode, setPostcode] = useState(initialJob?.postcode ? String(initialJob.postcode) : "");
@@ -58,11 +58,12 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
     return bits || "";
   }, [initialJob?.suburb, initialJob?.state, initialJob?.postcode]);
 
+  // ✅ Only require title, business, suburb (state & postcode optional)
   const disabled = useMemo(() => {
     if (!title.trim() || !business.trim()) return true;
-    if (!suburb.trim() || !stateA.trim() || !/^\d{4}$/.test(postcode)) return true;
+    if (!suburb.trim()) return true;
     return false;
-  }, [title, business, suburb, stateA, postcode]);
+  }, [title, business, suburb]);
 
   function buildDoneAt(month: string, year: string): string | null {
     if (!month || !year) return null;
@@ -83,8 +84,10 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
       title: title.trim(),
       business_name: business.trim(),
       suburb: suburb.trim(),
-      state: stateA.trim(),
-      postcode: postcode ? parseInt(postcode, 10) : null,
+      // ✅ allow null state if not provided
+      state: stateA.trim() || null,
+      // ✅ store postcode if valid; else null
+      postcode: /^\d{4}$/.test(postcode) ? parseInt(postcode, 10) : null,
       recommend,
       notes: notes.trim() || null,
       cost_type: costNumber != null ? "exact" : "na",
@@ -148,7 +151,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
         />
       </div>
 
-      {/* Location via Mapbox autocomplete (postcode shown in list; no extra fields) */}
+      {/* Location via Mapbox autocomplete */}
       <div>
         <label className="block text-sm font-medium">Suburb *</label>
         <SuburbAutocomplete
@@ -162,7 +165,7 @@ export default function JobForm({ initialJob = null, onCreated, onSaved, submitL
           onBlurAutoFillEmpty
           className="mt-1"
         />
-        <p className="mt-1 text-xs text-gray-500">We’ll fill state and postcode for you.</p>
+        <p className="mt-1 text-xs text-gray-500">We’ll fill state and postcode for you (if available).</p>
       </div>
 
       {/* Recommendation */}
