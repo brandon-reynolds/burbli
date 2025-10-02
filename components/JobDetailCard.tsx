@@ -14,10 +14,14 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
   useEffect(() => {
     let ignore = false;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!ignore) setCurrentUserId(user?.id ?? null);
     })();
-    return () => { ignore = true; };
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -51,6 +55,13 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
     return "Cost not shared";
   }, [job]);
 
+  const completedText = useMemo(() => {
+    if (!job?.done_at) return null;
+    const d = new Date(job.done_at as unknown as string);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleString("en-AU", { month: "long", year: "numeric" });
+  }, [job?.done_at]);
+
   async function copyLink() {
     if (!shareUrl) return;
     try {
@@ -63,7 +74,11 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
   async function deleteHere() {
     if (!job?.id || !currentUserId) return;
     if (!confirm("Delete this post? This cannot be undone.")) return;
-    const { error } = await supabase.from("jobs").delete().eq("id", job.id).eq("owner_id", currentUserId);
+    const { error } = await supabase
+      .from("jobs")
+      .delete()
+      .eq("id", job.id)
+      .eq("owner_id", currentUserId);
     if (error) {
       alert(`Could not delete. ${error.message ?? ""}`);
       return;
@@ -77,14 +92,14 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
   }
 
   if (!job) {
-    return <div className="rounded-2xl border bg-white p-6 text-gray-500">Select a job to view details.</div>;
+    return (
+      <div className="rounded-2xl border bg-white p-6 text-gray-500">
+        Select a job to view details.
+      </div>
+    );
   }
 
   const isMine = currentUserId && job.owner_id === currentUserId;
-
-  // Location string WITHOUT postcode
-  const locLabel = [job.suburb, job.state].filter(Boolean).join(", ");
-  const locQuery = `${job.suburb ?? ""} ${job.state ?? ""}`.trim();
 
   return (
     <article className="rounded-2xl border bg-white p-5 md:p-6">
@@ -114,7 +129,10 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
               ⋯
             </button>
             {menuOpen && (
-              <div role="menu" className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg">
+              <div
+                role="menu"
+                className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg"
+              >
                 {isMine ? (
                   <>
                     <Link
@@ -153,9 +171,14 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
       </h2>
 
       <section className="mt-6">
-        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Who did it</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Who did it
+        </div>
         {job.business_name ? (
-          <Link href={`/feed?q=${encodeURIComponent(job.business_name)}`} className="mt-1 inline-block text-base underline">
+          <Link
+            href={`/feed?q=${encodeURIComponent(job.business_name)}`}
+            className="mt-1 inline-block text-base underline"
+          >
             {job.business_name}
           </Link>
         ) : (
@@ -164,28 +187,50 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
       </section>
 
       <section className="mt-6">
-        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Location</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Location
+        </div>
         <div className="mt-1 text-base">
-          {locLabel ? (
+          {job.suburb ? (
             <Link
-              href={`/feed?q=${encodeURIComponent(locQuery)}`}
+              href={`/feed?suburb=${encodeURIComponent(job.suburb)}${
+                job.state ? `&state=${encodeURIComponent(job.state)}` : ""
+              }`}
               className="underline"
             >
-              {locLabel}
+              {[job.suburb, job.state].filter(Boolean).join(", ")}
             </Link>
-          ) : "—"}
+          ) : (
+            "—"
+          )}
         </div>
       </section>
 
+      {/* ✅ When it was done */}
+      {completedText && (
+        <section className="mt-6">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            When it was done
+          </div>
+          <div className="mt-1 text-base">{completedText}</div>
+        </section>
+      )}
+
       <section className="mt-6">
-        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cost</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Cost
+        </div>
         <div className="mt-1 text-base">{costDisplay}</div>
       </section>
 
       {job.notes && (
         <section className="mt-6">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Details</div>
-          <p className="mt-2 whitespace-pre-wrap text-base leading-relaxed text-gray-800">{job.notes}</p>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Details
+          </div>
+          <p className="mt-2 whitespace-pre-wrap text-base leading-relaxed text-gray-800">
+            {job.notes}
+          </p>
         </section>
       )}
 
