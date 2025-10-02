@@ -2,7 +2,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
@@ -29,7 +28,9 @@ export default function MyPosts() {
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       const uid = user?.id ?? null;
       setUserId(uid);
       if (!uid) {
@@ -69,46 +70,68 @@ export default function MyPosts() {
   const total = useMemo(() => jobs.length, [jobs]);
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between">
+    <section className="mx-auto w-full max-w-3xl sm:max-w-4xl">
+      <div className="mb-4 flex items-center justify-between px-3 sm:px-0">
         <h1 className="text-2xl font-semibold">My posts</h1>
-        <Link href="/submit" className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-black">
+        <a
+          href="/submit"
+          className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-black"
+        >
           Share a project
-        </Link>
+        </a>
       </div>
 
-      {loading && <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>}
+      {loading && (
+        <div className="mx-3 sm:mx-0 rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
+      )}
 
       {!loading && total === 0 && (
-        <div className="rounded-2xl border bg-white p-6 text-gray-500">
+        <div className="mx-3 sm:mx-0 rounded-2xl border bg-white p-6 text-gray-500">
           Nothing yet. Share your first project to help neighbours.
         </div>
       )}
 
-      <div className="grid gap-3">
-        {jobs.map((j) => {
-          const location = [j.suburb, j.state].filter(Boolean).join(", ");
-          return (
-            <Link
-              key={j.id}
-              href={`/post/${j.id}`}
-              className="relative rounded-2xl border bg-white p-4 flex items-start justify-between gap-3 hover:border-gray-300"
-            >
-              <div className="min-w-0">
-                <h3 className="text-base font-semibold truncate">{j.title || "Untitled"}</h3>
+      <div className="grid gap-3 px-3 sm:px-0">
+        {jobs.map((j) => (
+          <article
+            key={j.id}
+            className="relative rounded-2xl border bg-white p-4 overflow-hidden"
+          >
+            {/* Make the whole card tappable (except menu) */}
+            <button
+              onClick={() => (window.location.href = `/post/${j.id}`)}
+              className="absolute inset-0"
+              aria-label={`Open ${j.title || "post"}`}
+              // allow clicks to hit the menu area
+              style={{ pointerEvents: "auto" }}
+            />
+            <div className="relative z-10 flex items-start justify-between gap-3">
+              {/* Left content must be able to shrink and wrap */}
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold leading-snug line-clamp-2 break-words">
+                  {j.title || "Untitled"}
+                </h3>
                 <div className="mt-1 space-y-1 text-sm text-gray-700">
-                  {j.business_name && <p className="truncate">{j.business_name}</p>}
-                  <p className="truncate">{location}</p>
-                  <p>{costDisplay(j)}</p>
+                  {j.business_name ? (
+                    <p className="truncate">{j.business_name}</p>
+                  ) : null}
+                  <p className="truncate">
+                    {[j.suburb, j.state].filter(Boolean).join(", ")}
+                  </p>
+                  <p className="truncate">{costDisplay(j)}</p>
                 </div>
-                <div className="mt-2 text-xs text-gray-500">
+                <div className="mt-3 text-xs text-gray-500">
                   Posted {timeAgo(j.created_at)}
                 </div>
               </div>
 
+              {/* Kebab menu – never let it grow */}
               <div className="relative shrink-0" data-menu-root>
                 <button
-                  onClick={(e) => { e.preventDefault(); setMenuOpenId((cur) => (cur === j.id ? null : j.id)); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpenId((cur) => (cur === j.id ? null : j.id));
+                  }}
                   className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
                   aria-haspopup="menu"
                   aria-expanded={menuOpenId === j.id}
@@ -123,17 +146,17 @@ export default function MyPosts() {
                     className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Link
+                    <a
                       href={`/edit/${j.id}`}
                       role="menuitem"
                       onClick={() => setMenuOpenId(null)}
                       className="block rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
                     >
                       Edit
-                    </Link>
+                    </a>
                     <button
                       role="menuitem"
-                      onClick={(e) => { e.preventDefault(); handleDelete(j.id); }}
+                      onClick={() => handleDelete(j.id)}
                       className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
                     >
                       Delete
@@ -141,9 +164,9 @@ export default function MyPosts() {
                   </div>
                 )}
               </div>
-            </Link>
-          );
-        })}
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );
