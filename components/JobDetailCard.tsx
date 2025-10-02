@@ -2,7 +2,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import type { Job } from "@/types";
 
@@ -14,14 +13,10 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
   useEffect(() => {
     let ignore = false;
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!ignore) setCurrentUserId(user?.id ?? null);
     })();
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, []);
 
   useEffect(() => {
@@ -92,11 +87,7 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
   }
 
   if (!job) {
-    return (
-      <div className="rounded-2xl border bg-white p-6 text-gray-500">
-        Select a job to view details.
-      </div>
-    );
+    return <div className="rounded-2xl border bg-white p-6 text-gray-500">Select a job to view details.</div>;
   }
 
   const isMine = currentUserId && job.owner_id === currentUserId;
@@ -129,20 +120,17 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
               ⋯
             </button>
             {menuOpen && (
-              <div
-                role="menu"
-                className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg"
-              >
+              <div role="menu" className="absolute right-0 z-20 mt-1 w-40 rounded-xl border bg-white p-1 shadow-lg">
                 {isMine ? (
                   <>
-                    <Link
+                    <a
                       href={`/edit/${job.id}`}
                       role="menuitem"
                       onClick={() => setMenuOpen(false)}
                       className="block rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
                     >
                       Edit
-                    </Link>
+                    </a>
                     <button
                       role="menuitem"
                       onClick={deleteHere}
@@ -171,66 +159,33 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
       </h2>
 
       <section className="mt-6">
-        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Who did it
-        </div>
-        {job.business_name ? (
-          <Link
-            href={`/feed?q=${encodeURIComponent(job.business_name)}`}
-            className="mt-1 inline-block text-base underline"
-          >
-            {job.business_name}
-          </Link>
-        ) : (
-          <div className="mt-1 text-base text-gray-600">Not specified</div>
-        )}
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Who did it</div>
+        <div className="mt-1 text-base">{job.business_name || <span className="text-gray-600">Not specified</span>}</div>
       </section>
 
       <section className="mt-6">
-        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Location
-        </div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Location</div>
         <div className="mt-1 text-base">
-          {job.suburb ? (
-            <Link
-              href={`/feed?suburb=${encodeURIComponent(job.suburb)}${
-                job.state ? `&state=${encodeURIComponent(job.state)}` : ""
-              }`}
-              className="underline"
-            >
-              {[job.suburb, job.state].filter(Boolean).join(", ")}
-            </Link>
-          ) : (
-            "—"
-          )}
+          {[job.suburb, job.state].filter(Boolean).join(", ") || "—"}
         </div>
       </section>
 
-      {/* ✅ When it was done */}
       {completedText && (
         <section className="mt-6">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            When it was done
-          </div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">When it was done</div>
           <div className="mt-1 text-base">{completedText}</div>
         </section>
       )}
 
       <section className="mt-6">
-        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Cost
-        </div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cost</div>
         <div className="mt-1 text-base">{costDisplay}</div>
       </section>
 
       {job.notes && (
         <section className="mt-6">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Details
-          </div>
-          <p className="mt-2 whitespace-pre-wrap text-base leading-relaxed text-gray-800">
-            {job.notes}
-          </p>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Details</div>
+          <p className="mt-2 whitespace-pre-wrap text-base leading-relaxed text-gray-800">{job.notes}</p>
         </section>
       )}
 
@@ -241,12 +196,12 @@ export default function JobDetailCard({ job }: { job: Job | null }) {
             : "Had something similar done? Share it to help neighbours know what to expect."}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Link
+          <a
             href="/submit"
             className="inline-flex items-center rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-black"
           >
             Share your project
-          </Link>
+          </a>
           <button
             onClick={copyLink}
             className="inline-flex items-center rounded-xl border px-4 py-2 text-sm hover:bg-gray-50"
