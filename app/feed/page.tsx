@@ -122,165 +122,183 @@ function FeedInner() {
   const hasAnyFilter = Boolean(q || suburbQ || stateQ || onlyRecommended);
 
   return (
-    <section className="mx-auto max-w-6xl p-4 md:p-8 grid lg:grid-cols-12 gap-6">
-      {/* Controls */}
-      <div className="lg:col-span-12 rounded-2xl border bg-white p-4">
-        <div className="flex flex-col gap-3">
-          {/* Keyword & Suburb rows (stack on mobile) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="relative">
-              <input
-                className="w-full rounded-xl border px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
-                placeholder="Search by title, business or notes"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-              />
-              {q && (
-                <button
-                  onClick={() => setQ("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-
-            <div>
-              <SuburbAutocomplete
-                label={suburbQ && stateQ ? `${suburbQ}, ${stateQ}` : suburbQ}
-                placeholder="Filter by suburb…"
-                onPick={(p) => {
-                  setSuburbQ(p.suburb ?? "");
-                  setStateQ(p.state ?? "");
-                }}
-                onBlurAutoFillEmpty
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={onlyRecommended}
-                onChange={(e) => setOnlyRecommended(e.target.checked)}
-              />
-              Recommended only
-            </label>
-
-            {hasAnyFilter && (
-              <button
-                onClick={() => {
-                  setQ("");
-                  setSuburbQ("");
-                  setStateQ("");
-                  setOnlyRecommended(false);
-                }}
-                className="text-sm underline"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-
-          <p className="text-xs text-gray-500">
-            These are <strong>completed</strong> projects shared by neighbours — not open job ads.
-          </p>
-        </div>
-      </div>
-
-      {/* Left list (cards are links on mobile; selectable on desktop) */}
-      <div className="lg:col-span-5 space-y-3">
-        {loading ? (
-          <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-2xl border bg-white p-6 text-gray-500">No results.</div>
-        ) : (
-          filtered.map((j) => {
-            const active = selected?.id === j.id;
-            const done = monthYear(j.done_at);
-            const location = [j.suburb, j.state].filter(Boolean).join(", ");
-
-            return (
-              <div key={j.id}>
-                {/* Mobile: make the whole card a link */}
-                <Link
-                  href={`/post/${j.id}`}
-                  className="block lg:hidden rounded-2xl border bg-white p-4 hover:border-gray-300"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-xs text-gray-500">{timeAgo(j.created_at)}</div>
-                      <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
-                      {j.business_name && (
-                        <div className="mt-1 text-sm text-gray-700">{j.business_name}</div>
-                      )}
-                      {location && (
-                        <div className="mt-1 text-sm text-gray-700">{location}</div>
-                      )}
-                      {done && (
-                        <div className="mt-1 text-sm text-gray-700">Completed {done}</div>
-                      )}
-                      <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
-                    </div>
-                    {j.recommend && (
-                      <span className="shrink-0 rounded-full bg-green-100 text-green-800 text-xs px-2 py-1">
-                        Recommended
-                      </span>
-                    )}
+    <div className="min-h-[60vh]">
+      {/* Top band to visually separate filters */}
+      <div className="w-full bg-gradient-to-b from-gray-50 to-white">
+        <section className="mx-auto max-w-6xl px-4 md:px-8 py-6 md:py-8">
+          <div className="rounded-2xl border bg-white/90 backdrop-blur-sm shadow-sm ring-1 ring-black/5">
+            <div className="p-4 md:p-6 space-y-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <h1 className="text-xl md:text-2xl font-semibold tracking-tight">Browse projects</h1>
+                {filtered.length > 0 && (
+                  <div className="text-xs md:text-sm text-gray-500">
+                    {filtered.length.toLocaleString("en-AU")} result{filtered.length === 1 ? "" : "s"}
                   </div>
-                </Link>
-
-                {/* Desktop: button selection to show right-side detail */}
-                <button
-                  onClick={() => setSelected(j)}
-                  className={[
-                    "hidden w-full text-left rounded-2xl border bg-white p-4 transition lg:block",
-                    active ? "ring-2 ring-indigo-200 border-indigo-300" : "hover:border-gray-300",
-                  ].join(" ")}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-xs text-gray-500">{timeAgo(j.created_at)}</div>
-                      <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
-                      {j.business_name && (
-                        <div className="mt-1 text-sm text-gray-700">{j.business_name}</div>
-                      )}
-                      {location && (
-                        <div className="mt-1 text-sm text-gray-700">{location}</div>
-                      )}
-                      {done && (
-                        <div className="mt-1 text-sm text-gray-700">Completed {done}</div>
-                      )}
-                      <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
-                    </div>
-                    {j.recommend && (
-                      <span className="shrink-0 rounded-full bg-green-100 text-green-800 text-xs px-2 py-1">
-                        Recommended
-                      </span>
-                    )}
-                  </div>
-                </button>
+                )}
               </div>
-            );
-          })
-        )}
+
+              {/* Keyword & Suburb rows (stack on mobile) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                <div className="relative">
+                  <input
+                    className="w-full rounded-xl border px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-200"
+                    placeholder="Search by title, business or details"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                  />
+                  {q && (
+                    <button
+                      onClick={() => setQ("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <SuburbAutocomplete
+                    label={suburbQ && stateQ ? `${suburbQ}, ${stateQ}` : suburbQ}
+                    placeholder="Filter by suburb…"
+                    onPick={(p) => {
+                      setSuburbQ(p.suburb ?? "");
+                      setStateQ(p.state ?? "");
+                    }}
+                    onBlurAutoFillEmpty
+                    className=""
+                  />
+                </div>
+              </div>
+
+              {/* Filters footer row */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={onlyRecommended}
+                    onChange={(e) => setOnlyRecommended(e.target.checked)}
+                  />
+                  Recommended only
+                </label>
+
+                {hasAnyFilter ? (
+                  <button
+                    onClick={() => {
+                      setQ("");
+                      setSuburbQ("");
+                      setStateQ("");
+                      setOnlyRecommended(false);
+                    }}
+                    className="text-sm underline"
+                  >
+                    Clear filters
+                  </button>
+                ) : (
+                  <div className="text-xs text-gray-500">
+                    These are <strong>completed</strong> projects shared by neighbours.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
 
-      {/* Right detail (desktop only) */}
-      <div className="hidden lg:block lg:col-span-7">
-        <div className="lg:sticky lg:top-24">
-          {selected ? (
-            <JobDetailCard job={selected} />
+      {/* Results grid */}
+      <section className="mx-auto max-w-6xl px-4 md:px-8 pb-8 md:pb-12 grid lg:grid-cols-12 gap-6">
+        {/* Left list (cards are links on mobile; selectable on desktop) */}
+        <div className="lg:col-span-5 space-y-3">
+          {loading ? (
+            <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-2xl border bg-white p-6 text-gray-500">No results.</div>
           ) : (
-            <div className="rounded-2xl border bg-white p-6 text-gray-500">
-              Select a job on the left to view details.
-            </div>
+            filtered.map((j) => {
+              const active = selected?.id === j.id;
+              const done = monthYear(j.done_at);
+              const location = [j.suburb, j.state].filter(Boolean).join(", ");
+
+              return (
+                <div key={j.id}>
+                  {/* Mobile: make the whole card a link */}
+                  <Link
+                    href={`/post/${j.id}`}
+                    className="block lg:hidden rounded-2xl border bg-white p-4 hover:border-gray-300"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500">{timeAgo(j.created_at)}</div>
+                        <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
+                        {j.business_name && (
+                          <div className="mt-1 text-sm text-gray-700">{j.business_name}</div>
+                        )}
+                        {location && (
+                          <div className="mt-1 text-sm text-gray-700">{location}</div>
+                        )}
+                        {done && (
+                          <div className="mt-1 text-sm text-gray-700">Completed {done}</div>
+                        )}
+                        <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
+                      </div>
+                      {j.recommend && (
+                        <span className="shrink-0 rounded-full bg-green-100 text-green-800 text-xs px-2 py-1">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+
+                  {/* Desktop: button selection to show right-side detail */}
+                  <button
+                    onClick={() => setSelected(j)}
+                    className={[
+                      "hidden w-full text-left rounded-2xl border bg-white p-4 transition lg:block",
+                      active ? "ring-2 ring-indigo-200 border-indigo-300" : "hover:border-gray-300",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500">{timeAgo(j.created_at)}</div>
+                        <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
+                        {j.business_name && (
+                          <div className="mt-1 text-sm text-gray-700">{j.business_name}</div>
+                        )}
+                        {location && (
+                          <div className="mt-1 text-sm text-gray-700">{location}</div>
+                        )}
+                        {done && (
+                          <div className="mt-1 text-sm text-gray-700">Completed {done}</div>
+                        )}
+                        <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
+                      </div>
+                      {j.recommend && (
+                        <span className="shrink-0 rounded-full bg-green-100 text-green-800 text-xs px-2 py-1">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                </div>
+              );
+            })
           )}
         </div>
-      </div>
-    </section>
+
+        {/* Right detail (desktop only) */}
+        <div className="hidden lg:block lg:col-span-7">
+          <div className="lg:sticky lg:top-24">
+            {selected ? (
+              <JobDetailCard job={selected} />
+            ) : (
+              <div className="rounded-2xl border bg-white p-6 text-gray-500">
+                Select a job on the left to view details.
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 
