@@ -44,6 +44,27 @@ function monthYear(iso?: string | null) {
   return d.toLocaleString("en-AU", { month: "long", year: "numeric" });
 }
 
+// Normalize each job to a numeric [lo, hi] for cost, if possible
+function costRange(j: Job): [number, number] | null {
+  if (j.cost_type === "exact" && j.cost != null && String(j.cost).trim() !== "") {
+    const n = Number(j.cost);
+    return isFinite(n) ? [n, n] : null;
+  }
+  if (j.cost_type === "range" && j.cost_min != null && j.cost_max != null) {
+    const a = Number(j.cost_min);
+    const b = Number(j.cost_max);
+    if (isFinite(a) && isFinite(b)) return [Math.min(a, b), Math.max(a, b)];
+  }
+  return null;
+}
+
+function parseMoney(s: string): number | null {
+  const cleaned = s.replace(/[^\d]/g, "");
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return isFinite(n) ? n : null;
+}
+
 function FeedInner() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -53,6 +74,10 @@ function FeedInner() {
   const [suburbQ, setSuburbQ] = useState<string>(sp.get("suburb") ?? "");
   const [stateQ, setStateQ] = useState<string>(sp.get("state") ?? "");
   const [onlyRecommended, setOnlyRecommended] = useState(sp.get("rec") === "1");
+
+  // Cost filters (A$)
+  const [costMin, setCostMin] = useState<string>(sp.get("cmin") ?? "");
+  const [costMax, setCostMax] = useState<string>(sp.get("cmax") ?? "");
 
   // data
   const [all, setAll] = useState<Job[]>([]);
@@ -84,34 +109,55 @@ function FeedInner() {
     if (suburbQ.trim()) params.set("suburb", suburbQ.trim());
     if (stateQ.trim()) params.set("state", stateQ.trim());
     if (onlyRecommended) params.set("rec", "1");
+    if (costMin.trim()) params.set("cmin", costMin.trim());
+    if (costMax.trim()) params.set("cmax", costMax.trim());
     router.replace(`/feed${params.toString() ? `?${params}` : ""}`, { scroll: false });
-  }, [q, suburbQ, stateQ, onlyRecommended, router]);
+  }, [q, suburbQ, stateQ, onlyRecommended, costMin, costMax, router]);
 
   // apply filters
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     const sub = suburbQ.trim().toLowerCase();
     const st = stateQ.trim().toUpperCase();
+    const minV = parseMoney(costMin);
+    const maxV = parseMoney(costMax);
 
     return all.filter((j) => {
-      const okRec = !onlyRecommended || !!j.recommend;
-
+      // free text
       const okFreeText =
         !s ||
         [j.title, j.suburb, j.business_name, j.notes]
           .map((v) => (v ?? "").toString().toLowerCase())
           .some((v) => v.includes(s));
 
-      // suburb filter: exact suburb match; if state is present enforce it too
+      // suburb (exact suburb match; if state present, enforce)
       const okSuburb =
         !sub
           ? true
           : (String(j.suburb ?? "").toLowerCase() === sub &&
              (!st || String(j.state ?? "").toUpperCase() === st));
 
-      return okRec && okFreeText && okSuburb;
+      // recommended
+      const okRec = !onlyRecommended || !!j.recommend;
+
+      // cost
+      const cr = costRange(j);
+      const hasCostFilter = minV != null || maxV != null;
+      let okCost = true;
+      if (hasCostFilter) {
+        if (!cr) {
+          okCost = false; // if filtering and job has no numeric cost, exclude
+        } else {
+          const [lo, hi] = cr;
+          const minOk = minV == null || hi >= minV; // overlap logic
+          const maxOk = maxV == null || lo <= maxV;
+          okCost = minOk && maxOk;
+        }
+      }
+
+      return okFreeText && okSuburb && okRec && okCost;
     });
-  }, [all, q, suburbQ, stateQ, onlyRecommended]);
+  }, [all, q, suburbQ, stateQ, onlyRecommended, costMin, costMax]);
 
   // auto-select first in the list on desktop
   useEffect(() => {
@@ -119,89 +165,141 @@ function FeedInner() {
     if (!loading && !filtered.length) setSelected(null);
   }, [loading, filtered, selected]);
 
-  const hasAnyFilter = Boolean(q || suburbQ || stateQ || onlyRecommended);
+  const hasAnyFilter =
+    Boolean(q || suburbQ || stateQ || onlyRecommended || costMin || costMax);
 
   return (
     <div className="min-h-[60vh]">
-      {/* Top band to visually separate filters */}
-      <div className="w-full bg-gradient-to-b from-gray-50 to-white">
+      {/* Light top band to separate controls */}
+      <div className="w-full border-b border-gray-100 bg-gray-50/60">
         <section className="mx-auto max-w-6xl px-4 md:px-8 py-6 md:py-8">
-          <div className="rounded-2xl border bg-white/90 backdrop-blur-sm shadow-sm ring-1 ring-black/5">
-            <div className="p-4 md:p-6 space-y-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <h1 className="text-xl md:text-2xl font-semibold tracking-tight">Browse projects</h1>
-                {filtered.length > 0 && (
-                  <div className="text-xs md:text-sm text-gray-500">
-                    {filtered.length.toLocaleString("en-AU")} result{filtered.length === 1 ? "" : "s"}
-                  </div>
+          <h1 className="text-xl md:text-2xl font-semibold tracking-tight mb-4">
+            Browse projects
+          </h1>
+
+          {/* Inputs: titles + controls */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                Search text
+              </div>
+              <div className="relative">
+                <input
+                  className="w-full rounded-xl border bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-200"
+                  placeholder="Search by title, business or details"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                />
+                {q && (
+                  <button
+                    onClick={() => setQ("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                  >
+                    Clear
+                  </button>
                 )}
               </div>
+            </div>
 
-              {/* Keyword & Suburb rows (stack on mobile) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                <div className="relative">
-                  <input
-                    className="w-full rounded-xl border px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-200"
-                    placeholder="Search by title, business or details"
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                  />
-                  {q && (
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                Search suburb
+              </div>
+              <SuburbAutocomplete
+                label={suburbQ && stateQ ? `${suburbQ}, ${stateQ}` : suburbQ}
+                placeholder="Start typing a suburb…"
+                onPick={(p) => {
+                  // store suburb+state to query-string and filter
+                  setSuburbQ(p.suburb ?? "");
+                  setStateQ(p.state ?? "");
+                }}
+                onBlurAutoFillEmpty
+              />
+            </div>
+
+            {/* Cost filter row (spans both on desktop) */}
+            <div className="md:col-span-2">
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500 w-full sm:w-auto">
+                  Cost (A$)
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      $
+                    </span>
+                    <input
+                      inputMode="numeric"
+                      value={costMin}
+                      onChange={(e) => setCostMin(e.target.value.replace(/[^\d]/g, ""))}
+                      placeholder="Min"
+                      className="w-32 rounded-xl border bg-white pl-7 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
+                    />
+                  </div>
+                  <span className="text-gray-500">–</span>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      $
+                    </span>
+                    <input
+                      inputMode="numeric"
+                      value={costMax}
+                      onChange={(e) => setCostMax(e.target.value.replace(/[^\d]/g, ""))}
+                      placeholder="Max"
+                      className="w-32 rounded-xl border bg-white pl-7 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
+                    />
+                  </div>
+
+                  {(costMin || costMax) && (
                     <button
-                      onClick={() => setQ("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                      onClick={() => { setCostMin(""); setCostMax(""); }}
+                      className="rounded-md border px-3 py-2 text-sm hover:bg-gray-50"
                     >
-                      Clear
+                      Clear cost
                     </button>
                   )}
                 </div>
 
-                <div>
-                  <SuburbAutocomplete
-                    label={suburbQ && stateQ ? `${suburbQ}, ${stateQ}` : suburbQ}
-                    placeholder="Filter by suburb…"
-                    onPick={(p) => {
-                      setSuburbQ(p.suburb ?? "");
-                      setStateQ(p.state ?? "");
-                    }}
-                    onBlurAutoFillEmpty
-                    className=""
-                  />
+                <div className="ml-auto">
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={onlyRecommended}
+                      onChange={(e) => setOnlyRecommended(e.target.checked)}
+                    />
+                    Recommended only
+                  </label>
                 </div>
-              </div>
-
-              {/* Filters footer row */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4"
-                    checked={onlyRecommended}
-                    onChange={(e) => setOnlyRecommended(e.target.checked)}
-                  />
-                  Recommended only
-                </label>
-
-                {hasAnyFilter ? (
-                  <button
-                    onClick={() => {
-                      setQ("");
-                      setSuburbQ("");
-                      setStateQ("");
-                      setOnlyRecommended(false);
-                    }}
-                    className="text-sm underline"
-                  >
-                    Clear filters
-                  </button>
-                ) : (
-                  <div className="text-xs text-gray-500">
-                    These are <strong>completed</strong> projects shared by neighbours.
-                  </div>
-                )}
               </div>
             </div>
           </div>
+
+          {/* Result count under controls */}
+          <div className="mt-3 text-sm text-gray-500">
+            {loading
+              ? "Loading…"
+              : `${filtered.length.toLocaleString("en-AU")} result${filtered.length === 1 ? "" : "s"}`}
+          </div>
+
+          {/* Clear filters helper */}
+          {hasAnyFilter && (
+            <div className="mt-1">
+              <button
+                onClick={() => {
+                  setQ("");
+                  setSuburbQ("");
+                  setStateQ("");
+                  setOnlyRecommended(false);
+                  setCostMin("");
+                  setCostMax("");
+                }}
+                className="text-sm underline"
+              >
+                Clear all filters
+              </button>
+            </div>
+          )}
         </section>
       </div>
 
