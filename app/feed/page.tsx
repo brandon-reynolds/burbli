@@ -12,7 +12,6 @@ import type { Job as JobT } from "@/types";
 type Job = JobT;
 
 /* ---------------- Icons (inline SVG, no deps) ---------------- */
-
 function IconBusiness(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
@@ -44,7 +43,6 @@ function IconDollar(props: React.SVGProps<SVGSVGElement>) {
 }
 
 /* ---------------- Helpers ---------------- */
-
 function timeAgo(iso?: string | null) {
   if (!iso) return "";
   const t = new Date(iso).getTime();
@@ -55,7 +53,6 @@ function timeAgo(iso?: string | null) {
   const days = Math.round(hrs / 24);
   return `${days}d ago`;
 }
-
 function costDisplay(j: Job) {
   if (j.cost != null && j.cost_type === "exact" && String(j.cost).trim() !== "") {
     const n = Number(j.cost);
@@ -70,15 +67,12 @@ function costDisplay(j: Job) {
   }
   return "Cost not shared";
 }
-
 function monthYear(iso?: string | null) {
   if (!iso) return null;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return null;
   return d.toLocaleString("en-AU", { month: "long", year: "numeric" });
 }
-
-// Normalize each job to a numeric [lo, hi] for cost, if possible
 function costRange(j: Job): [number, number] | null {
   if (j.cost_type === "exact" && j.cost != null && String(j.cost).trim() !== "") {
     const n = Number(j.cost);
@@ -91,7 +85,6 @@ function costRange(j: Job): [number, number] | null {
   }
   return null;
 }
-
 function parseMoney(s: string): number | null {
   const cleaned = s.replace(/[^\d]/g, "");
   if (!cleaned) return null;
@@ -100,7 +93,6 @@ function parseMoney(s: string): number | null {
 }
 
 /* ---------------- Page ---------------- */
-
 function FeedInner() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -110,8 +102,6 @@ function FeedInner() {
   const [suburbQ, setSuburbQ] = useState<string>(sp.get("suburb") ?? "");
   const [stateQ, setStateQ] = useState<string>(sp.get("state") ?? "");
   const [onlyRecommended, setOnlyRecommended] = useState(sp.get("rec") === "1");
-
-  // Cost filters (A$)
   const [costMin, setCostMin] = useState<string>(sp.get("cmin") ?? "");
   const [costMax, setCostMax] = useState<string>(sp.get("cmax") ?? "");
 
@@ -120,7 +110,7 @@ function FeedInner() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Job | null>(null);
 
-  // load all jobs (newest first)
+  // load all jobs
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -138,7 +128,7 @@ function FeedInner() {
     })();
   }, []);
 
-  // keep URL in sync (for share/back/forward)
+  // keep URL in sync
   useEffect(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
@@ -150,7 +140,7 @@ function FeedInner() {
     router.replace(`/feed${params.toString() ? `?${params}` : ""}`, { scroll: false });
   }, [q, suburbQ, stateQ, onlyRecommended, costMin, costMax, router]);
 
-  // apply filters
+  // filter
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     const sub = suburbQ.trim().toLowerCase();
@@ -159,31 +149,26 @@ function FeedInner() {
     const maxV = parseMoney(costMax);
 
     return all.filter((j) => {
-      // free text
       const okFreeText =
         !s ||
         [j.title, j.suburb, j.business_name, j.notes]
           .map((v) => (v ?? "").toString().toLowerCase())
           .some((v) => v.includes(s));
 
-      // suburb (exact suburb match; if state present, enforce)
       const okSuburb =
         !sub
           ? true
           : (String(j.suburb ?? "").toLowerCase() === sub &&
              (!st || String(j.state ?? "").toUpperCase() === st));
 
-      // recommended
       const okRec = !onlyRecommended || !!j.recommend;
 
-      // cost overlap filter
       const cr = costRange(j);
       const hasCostFilter = minV != null || maxV != null;
       let okCost = true;
       if (hasCostFilter) {
-        if (!cr) {
-          okCost = false;
-        } else {
+        if (!cr) okCost = false;
+        else {
           const [lo, hi] = cr;
           const minOk = minV == null || hi >= minV;
           const maxOk = maxV == null || lo <= maxV;
@@ -195,31 +180,35 @@ function FeedInner() {
     });
   }, [all, q, suburbQ, stateQ, onlyRecommended, costMin, costMax]);
 
-  // auto-select first in the list on desktop
+  // auto-select first on desktop
   useEffect(() => {
     if (!loading && filtered.length && !selected) setSelected(filtered[0]);
     if (!loading && !filtered.length) setSelected(null);
   }, [loading, filtered, selected]);
 
-  const hasAnyFilter =
-    Boolean(q || suburbQ || stateQ || onlyRecommended || costMin || costMax);
+  const hasAnyFilter = Boolean(q || suburbQ || stateQ || onlyRecommended || costMin || costMax);
 
   return (
     <div className="min-h-[60vh]">
-      {/* Top band (aligned with masthead container sizing) */}
-      <div className="w-full border-b border-gray-100 bg-gray-50/60">
-        <section className="mx-auto max-w-6xl px-4 md:px-8 py-6 md:py-8">
-          <h1 className="text-xl md:text-2xl font-semibold tracking-tight">Browse projects</h1>
+      {/* Header row (match My Posts) */}
+      <section className="mx-auto max-w-6xl px-4 md:px-8 pt-6 md:pt-8">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Browse projects</h1>
+          <a href="/submit" className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-black">
+            Share a project
+          </a>
+        </div>
 
-          {/* Inputs: titles + controls (aligned grid) */}
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+        {/* Filter box */}
+        <div className="rounded-2xl border bg-white p-4 md:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
                 Search text
               </div>
               <div className="relative">
                 <input
-                  className="w-full rounded-xl border bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-200"
+                  className="w-full rounded-xl border px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-200"
                   placeholder="Search by title, business or details"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
@@ -285,10 +274,7 @@ function FeedInner() {
 
                   {(costMin || costMax) && (
                     <button
-                      onClick={() => {
-                        setCostMin("");
-                        setCostMax("");
-                      }}
+                      onClick={() => { setCostMin(""); setCostMax(""); }}
                       className="rounded-md border px-3 py-2 text-sm hover:bg-gray-50"
                     >
                       Clear cost
@@ -311,14 +297,12 @@ function FeedInner() {
             </div>
           </div>
 
-          {/* Result count under controls */}
+          {/* Result count & clear */}
           <div className="mt-3 text-sm text-gray-500">
             {loading
               ? "Loading…"
               : `${filtered.length.toLocaleString("en-AU")} result${filtered.length === 1 ? "" : "s"}`}
           </div>
-
-          {/* Clear filters helper */}
           {hasAnyFilter && (
             <div className="mt-1">
               <button
@@ -336,12 +320,12 @@ function FeedInner() {
               </button>
             </div>
           )}
-        </section>
-      </div>
+        </div>
+      </section>
 
-      {/* Results grid (aligned with masthead container) */}
+      {/* Results grid */}
       <section className="mx-auto max-w-6xl px-4 md:px-8 pb-8 md:pb-12 grid lg:grid-cols-12 gap-6">
-        {/* Left list (cards are links on mobile; selectable on desktop) */}
+        {/* Left list */}
         <div className="lg:col-span-5 space-y-3">
           {loading ? (
             <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
@@ -352,18 +336,17 @@ function FeedInner() {
               const active = selected?.id === j.id;
               const done = monthYear(j.done_at);
               const location = [j.suburb, j.state].filter(Boolean).join(", ");
-
               return (
                 <div key={j.id}>
-                  {/* Mobile: make the whole card a link */}
+                  {/* Mobile: card navigates */}
                   <Link
                     href={`/post/${j.id}`}
                     className="block lg:hidden rounded-2xl border bg-white p-4 hover:border-gray-300"
                   >
-                    <CardContent j={j} location={location} done={done} />
+                    <CardRows j={j} location={location} done={done} />
                   </Link>
 
-                  {/* Desktop: select to show right-side detail */}
+                  {/* Desktop: select to show right detail */}
                   <button
                     onClick={() => setSelected(j)}
                     className={[
@@ -371,7 +354,7 @@ function FeedInner() {
                       active ? "ring-2 ring-indigo-200 border-indigo-300" : "hover:border-gray-300",
                     ].join(" ")}
                   >
-                    <CardContent j={j} location={location} done={done} />
+                    <CardRows j={j} location={location} done={done} />
                   </button>
                 </div>
               );
@@ -379,7 +362,7 @@ function FeedInner() {
           )}
         </div>
 
-        {/* Right detail (desktop only) */}
+        {/* Right detail */}
         <div className="hidden lg:block lg:col-span-7">
           <div className="lg:sticky lg:top-24">
             {selected ? (
@@ -396,7 +379,7 @@ function FeedInner() {
   );
 }
 
-function CardContent({ j, location, done }: { j: Job; location: string; done: string | null }) {
+function CardRows({ j, location, done }: { j: Job; location: string; done: string | null }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
