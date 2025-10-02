@@ -1,14 +1,15 @@
 // app/feed/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import type { Job as JobT } from "@/types";
 import JobDetailCard from "@/components/JobDetailCard";
+import SuburbAutocomplete from "@/components/SuburbAutocomplete";
+import type { Job as JobT } from "@/types";
 
 type Job = JobT;
-const STATES = ["VIC","NSW","QLD","SA","WA","TAS","ACT","NT"] as const;
 
 function timeAgo(iso?: string | null) {
   if (!iso) return "";
@@ -22,7 +23,7 @@ function timeAgo(iso?: string | null) {
 }
 
 function costDisplay(j: Job) {
-  if (j.cost_type === "exact" && j.cost != null && String(j.cost).trim() !== "") {
+  if (j.cost != null && j.cost_type === "exact" && String(j.cost).trim() !== "") {
     const n = Number(j.cost);
     return isFinite(n) ? `$${Math.round(n).toLocaleString()}` : `$${String(j.cost)}`;
   }
@@ -36,17 +37,29 @@ function costDisplay(j: Job) {
   return "Cost not shared";
 }
 
+function monthYear(iso?: string | null) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleString("en-AU", { month: "long", year: "numeric" });
+}
+
 function FeedInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
+  // URL-backed filters
+  const [q, setQ] = useState(sp.get("q") ?? "");
+  const [suburbQ, setSuburbQ] = useState<string>(sp.get("suburb") ?? "");
+  const [stateQ, setStateQ] = useState<string>(sp.get("state") ?? "");
+  const [onlyRecommended, setOnlyRecommended] = useState(sp.get("rec") === "1");
+
+  // data
   const [all, setAll] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState(sp.get("q") ?? "");
-  const [stateFilter, setStateFilter] = useState<string>(sp.get("state") ?? "ALL");
-  const [onlyRecommended, setOnlyRecommended] = useState(sp.get("rec") === "1");
   const [selected, setSelected] = useState<Job | null>(null);
 
+  // load all jobs (newest first)
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -64,86 +77,120 @@ function FeedInner() {
     })();
   }, []);
 
-  // keep URL in sync
+  // keep URL in sync (for share/back/forward)
   useEffect(() => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
-    if (stateFilter !== "ALL") params.set("state", stateFilter);
+    if (suburbQ.trim()) params.set("suburb", suburbQ.trim());
+    if (stateQ.trim()) params.set("state", stateQ.trim());
     if (onlyRecommended) params.set("rec", "1");
     router.replace(`/feed${params.toString() ? `?${params}` : ""}`, { scroll: false });
-  }, [q, stateFilter, onlyRecommended, router]);
+  }, [q, suburbQ, stateQ, onlyRecommended, router]);
 
+  // apply filters
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return all.filter((j) => {
-      const okQ =
-        !s ||
-        [j.title, j.suburb, j.state, j.business_name]
-          .map(v => (v ?? "").toString().toLowerCase())
-          .some(v => v.includes(s));
-      const okS = stateFilter === "ALL" || j.state === stateFilter;
-      const okR = !onlyRecommended || !!j.recommend;
-      return okQ && okS && okR;
-    });
-  }, [all, q, stateFilter, onlyRecommended]);
+    const sub = suburbQ.trim().toLowerCase();
+    const st = stateQ.trim().toUpperCase();
 
-  // auto-select first on desktop
+    return all.filter((j) => {
+      const okRec = !onlyRecommended || !!j.recommend;
+
+      const okFreeText =
+        !s ||
+        [j.title, j.suburb, j.business_name, j.notes]
+          .map((v) => (v ?? "").toString().toLowerCase())
+          .some((v) => v.includes(s));
+
+      // suburb filter: exact suburb match; if state is present enforce it too
+      const okSuburb =
+        !sub
+          ? true
+          : (String(j.suburb ?? "").toLowerCase() === sub &&
+             (!st || String(j.state ?? "").toUpperCase() === st));
+
+      return okRec && okFreeText && okSuburb;
+    });
+  }, [all, q, suburbQ, stateQ, onlyRecommended]);
+
+  // auto-select first in the list on desktop
   useEffect(() => {
     if (!loading && filtered.length && !selected) setSelected(filtered[0]);
     if (!loading && !filtered.length) setSelected(null);
   }, [loading, filtered, selected]);
 
+  const hasAnyFilter = Boolean(q || suburbQ || stateQ || onlyRecommended);
+
   return (
     <section className="mx-auto max-w-6xl p-4 md:p-8 grid lg:grid-cols-12 gap-6">
       {/* Controls */}
       <div className="lg:col-span-12 rounded-2xl border bg-white p-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <input
-            className="flex-1 min-w-[260px] rounded-xl border p-3"
-            placeholder="Search by title, business, suburb or state"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setStateFilter("ALL")}
-              className={`px-3 py-2 rounded-full text-sm ${stateFilter==="ALL"?"bg-black text-white":"bg-gray-100"}`}
-            >
-              ALL ({all.length})
-            </button>
-            {STATES.map(s => {
-              const count = all.filter(j => j.state === s).length;
-              return (
+        <div className="flex flex-col gap-3">
+          {/* Keyword & Suburb rows (stack on mobile) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="relative">
+              <input
+                className="w-full rounded-xl border px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200"
+                placeholder="Search by title, business or notes"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+              {q && (
                 <button
-                  key={s}
-                  onClick={() => setStateFilter(s)}
-                  className={`px-3 py-2 rounded-full text-sm ${stateFilter===s?"bg-black text-white":"bg-gray-100"}`}
+                  onClick={() => setQ("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
                 >
-                  {s} ({count})
+                  Clear
                 </button>
-              );
-            })}
-            <label className="ml-2 inline-flex items-center gap-2 text-sm">
+              )}
+            </div>
+
+            <div>
+              <SuburbAutocomplete
+                label={suburbQ && stateQ ? `${suburbQ}, ${stateQ}` : suburbQ}
+                placeholder="Filter by suburb…"
+                onPick={(p) => {
+                  setSuburbQ(p.suburb ?? "");
+                  setStateQ(p.state ?? "");
+                }}
+                onBlurAutoFillEmpty
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
               <input
                 type="checkbox"
+                className="h-4 w-4"
                 checked={onlyRecommended}
-                onChange={(e)=>setOnlyRecommended(e.target.checked)}
+                onChange={(e) => setOnlyRecommended(e.target.checked)}
               />
               Recommended only
             </label>
-            {(q || stateFilter!=="ALL" || onlyRecommended) && (
+
+            {hasAnyFilter && (
               <button
-                onClick={() => { setQ(""); setStateFilter("ALL"); setOnlyRecommended(false); }}
+                onClick={() => {
+                  setQ("");
+                  setSuburbQ("");
+                  setStateQ("");
+                  setOnlyRecommended(false);
+                }}
                 className="text-sm underline"
               >
                 Clear filters
               </button>
             )}
           </div>
+
+          <p className="text-xs text-gray-500">
+            These are <strong>completed</strong> projects shared by neighbours — not open job ads.
+          </p>
         </div>
       </div>
 
-      {/* Left list */}
+      {/* Left list (cards are links on mobile; selectable on desktop) */}
       <div className="lg:col-span-5 space-y-3">
         {loading ? (
           <div className="rounded-2xl border bg-white p-6 text-gray-500">Loading…</div>
@@ -152,41 +199,76 @@ function FeedInner() {
         ) : (
           filtered.map((j) => {
             const active = selected?.id === j.id;
+            const done = monthYear(j.done_at);
             const location = [j.suburb, j.state].filter(Boolean).join(", ");
+
             return (
-              <button
-                key={j.id}
-                onClick={() => {
-                  // Navigate on small screens, select on large screens
-                  if (typeof window !== "undefined" && window.innerWidth < 1024) {
-                    router.push(`/post/${j.id}`);
-                  } else {
-                    setSelected(j);
-                  }
-                }}
-                className={`w-full text-left rounded-2xl border bg-white p-4 hover:border-gray-300 ${active ? "ring-2 ring-indigo-200 border-indigo-300" : ""}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs text-gray-500">{timeAgo(j.created_at)}</div>
-                    <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
-                    <div className="mt-1 text-sm text-gray-700 truncate">{j.business_name || "—"}</div>
-                    <div className="mt-1 text-sm text-gray-700 truncate">{location}</div>
-                    <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
+              <div key={j.id}>
+                {/* Mobile: make the whole card a link */}
+                <Link
+                  href={`/post/${j.id}`}
+                  className="block lg:hidden rounded-2xl border bg-white p-4 hover:border-gray-300"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs text-gray-500">{timeAgo(j.created_at)}</div>
+                      <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
+                      {j.business_name && (
+                        <div className="mt-1 text-sm text-gray-700">{j.business_name}</div>
+                      )}
+                      {location && (
+                        <div className="mt-1 text-sm text-gray-700">{location}</div>
+                      )}
+                      {done && (
+                        <div className="mt-1 text-sm text-gray-700">Completed {done}</div>
+                      )}
+                      <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
+                    </div>
+                    {j.recommend && (
+                      <span className="shrink-0 rounded-full bg-green-100 text-green-800 text-xs px-2 py-1">
+                        Recommended
+                      </span>
+                    )}
                   </div>
-                  {j.recommend && (
-                    <span className="shrink-0 rounded-full bg-green-100 text-green-800 text-xs px-2 py-1">
-                      Recommended
-                    </span>
-                  )}
-                </div>
-              </button>
+                </Link>
+
+                {/* Desktop: button selection to show right-side detail */}
+                <button
+                  onClick={() => setSelected(j)}
+                  className={[
+                    "hidden w-full text-left rounded-2xl border bg-white p-4 transition lg:block",
+                    active ? "ring-2 ring-indigo-200 border-indigo-300" : "hover:border-gray-300",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs text-gray-500">{timeAgo(j.created_at)}</div>
+                      <div className="mt-1 font-medium line-clamp-2">{j.title || "Untitled"}</div>
+                      {j.business_name && (
+                        <div className="mt-1 text-sm text-gray-700">{j.business_name}</div>
+                      )}
+                      {location && (
+                        <div className="mt-1 text-sm text-gray-700">{location}</div>
+                      )}
+                      {done && (
+                        <div className="mt-1 text-sm text-gray-700">Completed {done}</div>
+                      )}
+                      <div className="mt-1 text-sm text-gray-900">{costDisplay(j)}</div>
+                    </div>
+                    {j.recommend && (
+                      <span className="shrink-0 rounded-full bg-green-100 text-green-800 text-xs px-2 py-1">
+                        Recommended
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </div>
             );
           })
         )}
       </div>
 
-      {/* Right detail */}
+      {/* Right detail (desktop only) */}
       <div className="hidden lg:block lg:col-span-7">
         <div className="lg:sticky lg:top-24">
           {selected ? (
